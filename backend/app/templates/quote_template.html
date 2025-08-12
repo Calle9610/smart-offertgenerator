@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offert - {{ quote.customer_name }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .header {
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .company-info {
+            float: left;
+            width: 60%;
+        }
+        
+        .company-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 5px;
+        }
+        
+        .company-details {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .quote-info {
+            float: right;
+            width: 35%;
+            text-align: right;
+        }
+        
+        .quote-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        
+        .quote-details {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+        }
+        
+        .clearfix::after {
+            content: "";
+            clear: both;
+            display: table;
+        }
+        
+        .customer-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        
+        .customer-name {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .project-name {
+            font-size: 16px;
+            color: #64748b;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 30px 0;
+        }
+        
+        .items-table th {
+            background: #2563eb;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .items-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .items-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+        
+        .totals-section {
+            margin-top: 30px;
+            text-align: right;
+        }
+        
+        .total-row {
+            padding: 8px 0;
+            font-size: 16px;
+        }
+        
+        .total-amount {
+            font-weight: bold;
+            font-size: 20px;
+            color: #2563eb;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+        }
+        
+        .terms {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header clearfix">
+        <div class="company-info">
+            <div class="company-name">{{ company.name }}</div>
+            <div class="company-details">
+                <div>Org.nr: 556123-4567</div>
+                <div>Telefon: 08-123 45 67</div>
+                <div>E-post: info@{{ company.name.lower().replace(' ', '') }}.se</div>
+            </div>
+        </div>
+        
+        <div class="quote-info">
+            <div class="quote-title">OFFERT</div>
+            <div class="quote-details">
+                <div><strong>Offertnummer:</strong> {{ str(quote.id)[:8].upper() }}</div>
+                <div><strong>Datum:</strong> {{ quote.created_at.strftime('%Y-%m-%d') }}</div>
+                <div><strong>Giltig till:</strong> {{ (quote.created_at + timedelta(days=30)).strftime('%Y-%m-%d') }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="customer-section">
+        <div class="customer-name">{{ quote.customer_name }}</div>
+        {% if quote.project_name %}
+        <div class="project-name">{{ quote.project_name }}</div>
+        {% endif %}
+    </div>
+    
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th>Beskrivning</th>
+                <th>Enhet</th>
+                <th>Antal</th>
+                <th>Á-pris (exkl. moms)</th>
+                <th>Summa (exkl. moms)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in quote_items %}
+            <tr>
+                <td>{{ item.description or 'Ingen beskrivning' }}</td>
+                <td>{{ item.unit or '-' }}</td>
+                <td>{{ "%.2f"|format(item.qty) }}</td>
+                <td>{{ "%.2f"|format(item.unit_price) }} {{ quote.currency }}</td>
+                <td>{{ "%.2f"|format(item.line_total) }} {{ quote.currency }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="totals-section">
+        <div class="total-row">
+            <span>Delsumma (exkl. moms):</span>
+            <span style="margin-left: 20px;">{{ "%.2f"|format(quote.subtotal) }} {{ quote.currency }}</span>
+        </div>
+        <div class="total-row">
+            <span>Moms ({{ "%.0f"|format(vat_rate) }}%):</span>
+            <span style="margin-left: 20px;">{{ "%.2f"|format(quote.vat) }} {{ quote.currency }}</span>
+        </div>
+        <div class="total-row total-amount">
+            <span>TOTALT (inkl. moms):</span>
+            <span style="margin-left: 20px;">{{ "%.2f"|format(quote.total) }} {{ quote.currency }}</span>
+        </div>
+    </div>
+    
+    <div class="terms">
+        <h3>Villkor</h3>
+        <ul>
+            <li>Denna offert är giltig i 30 dagar från datum</li>
+            <li>Priser är angivna exklusive moms om inget annat anges</li>
+            <li>Betalning sker enligt överenskommelse</li>
+            <li>Arbetet påbörjas efter bekräftelse och eventuell avbetalning</li>
+        </ul>
+    </div>
+    
+    <div class="footer">
+        <p>Tack för ditt förtroende! Vi ser fram emot att arbeta med dig.</p>
+        <p>För frågor, kontakta oss på info@{{ company.name.lower().replace(' ', '') }}.se</p>
+    </div>
+</body>
+</html> 
