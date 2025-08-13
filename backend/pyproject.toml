@@ -21,9 +21,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "pytest",
-  "pytest-asyncio",
-  "pytest-cov",
   "black",
   "isort",
   "mypy",
