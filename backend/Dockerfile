@@ -1,34 +1,38 @@
 FROM python:3.11-slim
 
-WORKDIR /app
-
-# Install system dependencies including WeasyPrint requirements
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
-    libgirepository1.0-dev \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libgdk-pixbuf2.0-dev \
+    g++ \
+    libpq-dev \
+    libcairo2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf2.0-0 \
     libffi-dev \
-    libjpeg-dev \
-    libopenjp2-7-dev \
-    libpng-dev \
-    libwebp-dev \
-    libxcb1 \
-    libxcb-render0 \
-    libxcb-shape0 \
-    libxcb-xfixes0 \
+    shared-mime-info \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
 
 # Copy requirements and install Python dependencies
 COPY pyproject.toml .
-RUN pip install --no-cache-dir -e .
+COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini .
+COPY start.sh .
 
-# Copy application code
-COPY . .
+# Install dependencies including test dependencies
+RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir pytest pytest-asyncio pytest-cov httpx
+
+# Make startup script executable
+RUN chmod +x /app/start.sh
 
 # Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# Start the application
+CMD ["/app/start.sh"] 
