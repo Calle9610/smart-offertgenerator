@@ -1,20 +1,9 @@
 import uuid
 
-from sqlalchemy import (
-    TIMESTAMP,
-    Boolean,
-    CheckConstraint,
-    Column,
-    ForeignKey,
-    Numeric,
-    String,
-    Text,
-    text,
-    Integer,
-    UniqueConstraint,
-)
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Column, String, Numeric, TIMESTAMP, text, ForeignKey, Boolean, Text, Integer, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
+import sqlalchemy as sa
 
 from .db import Base
 
@@ -53,16 +42,15 @@ class Company(Base):
     name = Column(String, nullable=False)
 
     # Relationships
-    tenant = relationship("Tenant", back_populates="companies")
+    users = relationship("User", back_populates="company")
     price_profiles = relationship("PriceProfile", back_populates="company")
     labor_rates = relationship("LaborRate", back_populates="company")
     materials = relationship("Material", back_populates="company")
     quotes = relationship("Quote", back_populates="company")
     project_requirements = relationship("ProjectRequirements", back_populates="company")
     generation_rules = relationship("GenerationRule", back_populates="company")
-    quote_events = relationship("QuoteEvent", back_populates="company")
-    adjustment_logs = relationship("QuoteAdjustmentLog", back_populates="company")
-    auto_tuning_patterns = relationship("AutoTuningPattern", back_populates="company")
+    quote_adjustment_logs = relationship("QuoteAdjustmentLog", back_populates="company")
+    tuning_stats = relationship("TuningStat", back_populates="company")
 
 
 class PriceProfile(Base):
@@ -101,10 +89,11 @@ class Material(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
     profile_id = Column(UUID(as_uuid=True), ForeignKey("price_profile.id"))
     sku = Column(String)
-    name = Column(String, nullable=False)
+    name = Column(Text, nullable=False)
     unit = Column(String, nullable=False, default="pcs")
     unit_cost = Column(Numeric(12, 2), nullable=False)
     markup_pct = Column(Numeric(6, 2), nullable=False, default=20.00)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
     # Relationships
     company = relationship("Company", back_populates="materials")
@@ -158,6 +147,25 @@ class Quote(Base):
     )
 
 
+class QuoteItem(Base):
+    __tablename__ = "quote_item"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quote_id = Column(
+        UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False
+    )
+    kind = Column(String, nullable=False)  # labor | material | custom
+    ref = Column(String)
+    description = Column(Text)
+    qty = Column(Numeric(12, 2), nullable=False)
+    unit = Column(String)
+    unit_price = Column(Numeric(12, 2), nullable=False)
+    line_total = Column(Numeric(12, 2), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
+
+    # Relationships
+    quote = relationship("Quote", back_populates="items")
+
+
 class QuotePackage(Base):
     """
     Quote packages for offering different service levels.
@@ -182,24 +190,6 @@ class QuotePackage(Base):
     quote = relationship("Quote", foreign_keys=[quote_id], back_populates="packages")
 
 
-class QuoteItem(Base):
-    __tablename__ = "quote_item"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    quote_id = Column(
-        UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False
-    )
-    kind = Column(String, nullable=False)  # labor | material | custom
-    ref = Column(String)
-    description = Column(String)
-    qty = Column(Numeric(12, 2), nullable=False)
-    unit = Column(String)
-    unit_price = Column(Numeric(12, 2), nullable=False)
-    line_total = Column(Numeric(12, 2), nullable=False)
-
-    # Relationships
-    quote = relationship("Quote", back_populates="items")
-
-
 class QuoteEvent(Base):
     """
     Quote events for tracking and analytics.
@@ -212,20 +202,13 @@ class QuoteEvent(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False)
     company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
-    event_type = Column(String, nullable=False)
-    metadata = Column(JSONB, nullable=True)  # Additional event data
+    event_type = Column(String, nullable=False)  # sent, opened, accepted, declined
+    meta = Column(JSONB, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
     # Relationships
     quote = relationship("Quote", back_populates="events")
-    company = relationship("Company", back_populates="quote_events")
-
-    __table_args__ = (
-        CheckConstraint(
-            "event_type IN ('created', 'sent', 'opened', 'accepted', 'declined', 'expired')",
-            name="valid_event_type",
-        ),
-    )
+    company = relationship("Company")
 
 
 class ProjectRequirements(Base):
@@ -239,14 +222,15 @@ class ProjectRequirements(Base):
 
     __tablename__ = "project_requirements"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False)
     company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
-    quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id"), nullable=True)
-    data = Column(JSONB, nullable=False)  # JSONB for flexible schema storage
+    data = Column(JSONB, nullable=False)  # Room type, area, finish level, etc.
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"), onupdate=text("now()"))
 
     # Relationships
-    company = relationship("Company", back_populates="project_requirements")
     quote = relationship("Quote", back_populates="project_requirements")
+    company = relationship("Company", back_populates="project_requirements")
 
 
 class GenerationRule(Base):
@@ -260,73 +244,44 @@ class GenerationRule(Base):
 
     __tablename__ = "generation_rule"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id", ondelete="CASCADE"), nullable=False)
     key = Column(Text, nullable=False)  # Format: "roomType|finishLevel"
-    rules = Column(JSONB, nullable=False)  # JSONB for flexible rule storage
+    rules = Column(JSONB, nullable=False)  # Generation rules configuration
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
-    updated_at = Column(
-        TIMESTAMP(timezone=True), server_default=text("now()"), onupdate=text("now()")
-    )
 
     # Relationships
     company = relationship("Company", back_populates="generation_rules")
 
 
-# Add back-references for relationships
-Tenant.users = relationship("User", back_populates="tenant")
-Tenant.companies = relationship("Company", back_populates="tenant")
-
-
 class QuoteAdjustmentLog(Base):
-    """
-    Log of user adjustments to auto-generated quote items.
-
-    Tracks how users modify auto-generated quantities and prices for auto-tuning.
-    All queries are scoped by company_id for multi-tenant security.
-    """
-
     __tablename__ = "quote_adjustment_log"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=False)
-    item_ref = Column(String, nullable=False)  # Reference to the adjusted item
-    item_kind = Column(String, nullable=False)  # labor, material, custom
-    original_qty = Column(Numeric(12, 2), nullable=False)
-    adjusted_qty = Column(Numeric(12, 2), nullable=False)
-    original_unit_price = Column(Numeric(12, 2), nullable=False)
-    adjusted_unit_price = Column(Numeric(12, 2), nullable=False)
-    adjustment_reason = Column(String, nullable=True)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id", ondelete="CASCADE"), nullable=False)
+    item_ref = Column(Text, nullable=False)
+    old_qty = Column(Numeric(12, 2), nullable=False)
+    new_qty = Column(Numeric(12, 2), nullable=False)
+    reason = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
     # Relationships
     quote = relationship("Quote", back_populates="adjustment_logs")
-    company = relationship("Company", back_populates="adjustment_logs")
-    user = relationship("User", back_populates="adjustment_logs")
+    company = relationship("Company", back_populates="quote_adjustment_logs")
 
 
-class AutoTuningPattern(Base):
-    """
-    Auto-tuning patterns learned from user adjustments.
+class TuningStat(Base):
+    __tablename__ = "tuning_stat"
+    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id", ondelete="CASCADE"), nullable=False)
+    key = Column(Text, nullable=False)  # Format: "roomType|finishLevel"
+    item_ref = Column(Text, nullable=False)
+    median_factor = Column(Numeric(8, 3), nullable=False, server_default=text("1.000"))
+    n = Column(Integer, nullable=False, server_default=text("0"))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"), onupdate=text("now()"))
 
-    Stores learned adjustment factors for different combinations of room type,
-    finish level, and item references. Used to improve future auto-generation.
-    All queries are scoped by company_id for multi-tenant security.
-    """
-
-    __tablename__ = "auto_tuning_patterns"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
-    pattern_key = Column(String, nullable=False)  # Format: "roomType|finishLevel|itemRef"
-    adjustment_factor = Column(Numeric(8, 4), nullable=False)  # Multiplier for quantities
-    confidence_score = Column(Numeric(5, 4), nullable=False)  # 0.0-1.0
-    sample_count = Column(Integer, nullable=False, server_default=text("0"))
-    last_adjusted_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False)
+    # Composite primary key
+    __table_args__ = (
+        sa.PrimaryKeyConstraint('company_id', 'key', 'item_ref'),
+    )
 
     # Relationships
-    company = relationship("Company", back_populates="auto_tuning_patterns")
-
-    __table_args__ = (
-        UniqueConstraint("company_id", "pattern_key", name="uq_company_pattern"),
-    )
+    company = relationship("Company", back_populates="tuning_stats")

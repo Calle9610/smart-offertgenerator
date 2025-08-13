@@ -1,9 +1,10 @@
 import secrets
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Dict
 from uuid import UUID
 
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 
 from . import models
 from .schemas import (
@@ -641,204 +642,190 @@ def delete_project_requirements(
     return True
 
 
-# Generation Rules operations
+# Generation Rule CRUD operations
 def create_generation_rule(
-    db: Session, rule: GenerationRuleCreate
+    db: Session, company_id: UUID, key: str, rules: Dict
 ) -> models.GenerationRule:
-    """
-    Create new generation rule.
-
-    Args:
-        db: Database session
-        rule: Rule data from request
-
-    Returns:
-        Created GenerationRule instance
-    """
-    db_rule = models.GenerationRule(**rule.dict())
-    db.add(db_rule)
+    """Create a new generation rule for a company."""
+    generation_rule = models.GenerationRule(
+        company_id=company_id,
+        key=key,
+        rules=rules,
+    )
+    db.add(generation_rule)
     db.commit()
-    db.refresh(db_rule)
-    return db_rule
+    db.refresh(generation_rule)
+    return generation_rule
+
+
+def get_generation_rule_by_key(
+    db: Session, company_id: UUID, key: str
+) -> Optional[models.GenerationRule]:
+    """Get a generation rule by key for a specific company."""
+    return db.query(models.GenerationRule).filter(
+        models.GenerationRule.company_id == company_id,
+        models.GenerationRule.key == key
+    ).first()
 
 
 def get_generation_rules_by_company(
     db: Session, company_id: UUID
 ) -> List[models.GenerationRule]:
-    """
-    Get all generation rules for a specific company.
-
-    Multi-tenant security: Only returns rules belonging to the company.
-
-    Args:
-        db: Database session
-        company_id: Company ID to get rules for
-
-    Returns:
-        List of GenerationRule for the company
-    """
-    return (
-        db.query(models.GenerationRule)
-        .filter(models.GenerationRule.company_id == company_id)
-        .order_by(models.GenerationRule.updated_at.desc())
-        .all()
-    )
-
-
-def get_generation_rule_by_key(
-    db: Session, key: str, company_id: UUID
-) -> Optional[models.GenerationRule]:
-    """
-    Get generation rule by key with company validation.
-
-    Multi-tenant security: Only returns rules belonging to the company.
-
-    Args:
-        db: Database session
-        key: Rule key to look up
-        company_id: Company ID for validation
-
-    Returns:
-        GenerationRule instance if found and authorized, None otherwise
-    """
-    return (
-        db.query(models.GenerationRule)
-        .filter(
-            models.GenerationRule.key == key,
-            models.GenerationRule.company_id == company_id,
-        )
-        .first()
-    )
+    """Get all generation rules for a company."""
+    return db.query(models.GenerationRule).filter(
+        models.GenerationRule.company_id == company_id
+    ).all()
 
 
 def update_generation_rule(
-    db: Session, rule_id: UUID, company_id: UUID, **kwargs
+    db: Session, rule_id: UUID, company_id: UUID, rules: Dict
 ) -> Optional[models.GenerationRule]:
-    """
-    Update generation rule with company validation.
-
-    Multi-tenant security: Only allows updates to rules belonging to the company.
-
-    Args:
-        db: Database session
-        rule_id: Generation rule ID to update
-        company_id: Company ID for tenant scoping
-        **kwargs: Fields to update
-
-    Returns:
-        Updated GenerationRule instance if successful, None if not found or not authorized
-    """
-    rule = (
-        db.query(models.GenerationRule)
-        .filter(
-            models.GenerationRule.id == rule_id,
-            models.GenerationRule.company_id == company_id,
-        )
-        .first()
-    )
-
-    if not rule:
-        return None
-
-    # Update fields
-    for field, value in kwargs.items():
-        if hasattr(rule, field):
-            setattr(rule, field, value)
-
-    db.commit()
-    db.refresh(rule)
+    """Update a generation rule."""
+    rule = db.query(models.GenerationRule).filter(
+        models.GenerationRule.id == rule_id,
+        models.GenerationRule.company_id == company_id
+    ).first()
+    
+    if rule:
+        rule.rules = rules
+        db.commit()
+        db.refresh(rule)
+    
     return rule
 
 
-def delete_generation_rule(db: Session, rule_id: UUID, company_id: UUID) -> bool:
-    """
-    Delete generation rule with company validation.
-
-    Multi-tenant security: Only allows deletion of rules belonging to the company.
-
-    Args:
-        db: Database session
-        rule_id: Generation rule ID to delete
-        company_id: Company ID for tenant scoping
-
-    Returns:
-        True if deleted successfully, False if not found or not authorized
-    """
-    rule = (
-        db.query(models.GenerationRule)
-        .filter(
-            models.GenerationRule.id == rule_id,
-            models.GenerationRule.company_id == company_id,
-        )
-        .first()
-    )
-
-    if not rule:
-        return False
-
-    db.delete(rule)
-    db.commit()
-    return True
+def delete_generation_rule(
+    db: Session, rule_id: UUID, company_id: UUID
+) -> bool:
+    """Delete a generation rule."""
+    rule = db.query(models.GenerationRule).filter(
+        models.GenerationRule.id == rule_id,
+        models.GenerationRule.company_id == company_id
+    ).first()
+    
+    if rule:
+        db.delete(rule)
+        db.commit()
+        return True
+    
+    return False
 
 
-# Quote Adjustment Log operations
+# Quote Adjustment Log CRUD operations
 def create_quote_adjustment_log(
-    db: Session, adjustment: QuoteAdjustmentLogCreate
+    db: Session,
+    quote_id: UUID,
+    company_id: UUID,
+    item_ref: str,
+    old_qty: Decimal,
+    new_qty: Decimal,
+    reason: Optional[str] = None
 ) -> models.QuoteAdjustmentLog:
-    """
-    Create new adjustment log entry.
-
-    Args:
-        db: Database session
-        adjustment: Adjustment log data
-
-    Returns:
-        Created QuoteAdjustmentLog instance
-    """
-    db_adjustment = models.QuoteAdjustmentLog(**adjustment.dict())
-    db.add(db_adjustment)
+    """Create a new quote adjustment log entry."""
+    adjustment_log = models.QuoteAdjustmentLog(
+        quote_id=quote_id,
+        company_id=company_id,
+        item_ref=item_ref,
+        old_qty=old_qty,
+        new_qty=new_qty,
+        reason=reason,
+    )
+    db.add(adjustment_log)
     db.commit()
-    db.refresh(db_adjustment)
-    return db_adjustment
+    db.refresh(adjustment_log)
+    return adjustment_log
 
 
 def get_adjustment_logs_by_quote(
     db: Session, quote_id: UUID, company_id: UUID
 ) -> List[models.QuoteAdjustmentLog]:
-    """
-    Get all adjustment logs for a specific quote with company validation.
+    """Get all adjustment logs for a specific quote."""
+    return db.query(models.QuoteAdjustmentLog).filter(
+        models.QuoteAdjustmentLog.quote_id == quote_id,
+        models.QuoteAdjustmentLog.company_id == company_id
+    ).order_by(models.QuoteAdjustmentLog.created_at.desc()).all()
 
-    Multi-tenant security: Only returns logs for quotes belonging to the company.
 
-    Args:
-        db: Database session
-        quote_id: Quote ID to get adjustments for
-        company_id: Company ID for tenant scoping
+def get_adjustment_logs_by_company(
+    db: Session, company_id: UUID, limit: int = 100
+) -> List[models.QuoteAdjustmentLog]:
+    """Get recent adjustment logs for a company."""
+    return db.query(models.QuoteAdjustmentLog).filter(
+        models.QuoteAdjustmentLog.company_id == company_id
+    ).order_by(models.QuoteAdjustmentLog.created_at.desc()).limit(limit).all()
 
-    Returns:
-        List of QuoteAdjustmentLog for the quote
-    """
-    # First verify the quote belongs to the company
-    quote = (
-        db.query(models.Quote)
-        .filter(models.Quote.id == quote_id, models.Quote.company_id == company_id)
-        .first()
-    )
 
-    if not quote:
-        return []
+# Tuning Stats CRUD operations
+def create_or_update_tuning_stat(
+    db: Session,
+    company_id: UUID,
+    key: str,
+    item_ref: str,
+    median_factor: Decimal,
+    n: int
+) -> models.TuningStat:
+    """Create or update a tuning statistic."""
+    # Try to find existing stat
+    stat = db.query(models.TuningStat).filter(
+        models.TuningStat.company_id == company_id,
+        models.TuningStat.key == key,
+        models.TuningStat.item_ref == item_ref
+    ).first()
+    
+    if stat:
+        # Update existing stat
+        stat.median_factor = median_factor
+        stat.n = n
+        stat.updated_at = func.now()
+    else:
+        # Create new stat
+        stat = models.TuningStat(
+            company_id=company_id,
+            key=key,
+            item_ref=item_ref,
+            median_factor=median_factor,
+            n=n,
+        )
+        db.add(stat)
+    
+    db.commit()
+    db.refresh(stat)
+    return stat
 
-    # Get adjustment logs for this quote
-    logs = (
-        db.query(models.QuoteAdjustmentLog)
-        .filter(models.QuoteAdjustmentLog.quote_id == quote_id)
-        .order_by(models.QuoteAdjustmentLog.created_at.desc())
-        .all()
-    )
 
-    # Convert datetime objects to strings for Pydantic compatibility
-    for log in logs:
-        if hasattr(log, "created_at") and log.created_at:
-            log.created_at = log.created_at.isoformat()
+def get_tuning_stats_by_company(
+    db: Session, company_id: UUID
+) -> List[models.TuningStat]:
+    """Get all tuning stats for a company."""
+    return db.query(models.TuningStat).filter(
+        models.TuningStat.company_id == company_id
+    ).all()
 
-    return logs
+
+def get_tuning_stat_by_key_and_item(
+    db: Session, company_id: UUID, key: str, item_ref: str
+) -> Optional[models.TuningStat]:
+    """Get a specific tuning stat by key and item reference."""
+    return db.query(models.TuningStat).filter(
+        models.TuningStat.company_id == company_id,
+        models.TuningStat.key == key,
+        models.TuningStat.item_ref == item_ref
+    ).first()
+
+
+def delete_tuning_stat(
+    db: Session, company_id: UUID, key: str, item_ref: str
+) -> bool:
+    """Delete a tuning statistic."""
+    stat = db.query(models.TuningStat).filter(
+        models.TuningStat.company_id == company_id,
+        models.TuningStat.key == key,
+        models.TuningStat.item_ref == item_ref
+    ).first()
+    
+    if stat:
+        db.delete(stat)
+        db.commit()
+        return True
+    
+    return False
