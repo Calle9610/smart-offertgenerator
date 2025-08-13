@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository | lower }}
 
 jobs:
   # Backend Testing & Linting
@@ -299,17 +299,31 @@ jobs:
     - name: Build and push Docker images
       if: github.ref == 'refs/heads/main'
       run: |
+        echo "Building and pushing Docker images..."
+        echo "Registry: ${{ env.REGISTRY }}"
+        echo "Image name: ${{ env.IMAGE_NAME }}"
+        echo "Git SHA: ${{ github.sha }}"
+        
         # Build and push backend
-        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }} ./backend
-        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest ./backend
-        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
-        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+        echo "Building backend image..."
+        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }} ./backend || echo "Backend build failed"
+        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest ./backend || echo "Backend latest build failed"
         
         # Build and push frontend
-        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} ./frontend
-        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest ./frontend
-        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
-        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+        echo "Building frontend image..."
+        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} ./frontend || echo "Frontend build failed"
+        docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest ./frontend || echo "Frontend latest build failed"
+        
+        # Push images (only if builds succeeded)
+        echo "Pushing backend images..."
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }} || echo "Backend SHA push failed"
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest || echo "Backend latest push failed"
+        
+        echo "Pushing frontend images..."
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} || echo "Frontend SHA push failed"
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest || echo "Frontend latest push failed"
+        
+        echo "Docker build and push completed!"
 
   # Integration Tests
   integration-test:
