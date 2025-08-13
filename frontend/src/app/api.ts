@@ -1,5 +1,5 @@
-// API base URL - always use localhost:8000 since we're accessing from localhost
-export const API_BASE = 'http://localhost:8000';
+// API base URL - use relative URLs to avoid CORS issues
+export const API_BASE = '';
 
 // Authentication functions
 export async function login(username: string, password: string) {
@@ -7,7 +7,7 @@ export async function login(username: string, password: string) {
   formData.append('username', username);
   formData.append('password', password);
   
-  const res = await fetch(`${API_BASE}/token`, {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
     body: formData
   });
@@ -21,7 +21,7 @@ export async function login(username: string, password: string) {
 }
 
 export async function getCurrentUser(token: string) {
-  const res = await fetch(`${API_BASE}/users/me`, {
+  const res = await fetch(`${API_BASE}/api/users/me`, {
     headers: {
       'Authorization': `Bearer ${token}`
     }
@@ -36,7 +36,7 @@ export async function getCurrentUser(token: string) {
 }
 
 export async function getCompanies(token: string) {
-  const res = await fetch(`${API_BASE}/companies`, {
+  const res = await fetch(`${API_BASE}/api/companies`, {
     headers: {
       'Authorization': `Bearer ${token}`
     }
@@ -59,7 +59,7 @@ export async function createProjectRequirements(payload: any, token: string) {
   console.log('Authorization header:', `Bearer ${token}`)
   console.log('Payload:', payload)
   
-  const res = await fetch(`${API_BASE}/project-requirements`, {
+  const res = await fetch(`${API_BASE}/api/project-requirements`, {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
@@ -83,7 +83,7 @@ export async function createProjectRequirements(payload: any, token: string) {
 }
 
 export async function getProjectRequirements(token: string) {
-  const res = await fetch(`${API_BASE}/project-requirements`, {
+  const res = await fetch(`${API_BASE}/api/project-requirements`, {
     headers: {
       'Authorization': `Bearer ${token}`
     }
@@ -99,7 +99,7 @@ export async function getProjectRequirements(token: string) {
 
 // Auto-generation function
 export async function autoGenerateQuote(payload: any, token: string) {
-  const res = await fetch(`${API_BASE}/quotes/autogenerate`, {
+  const res = await fetch(`${API_BASE}/api/quotes/autogenerate`, {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
@@ -116,10 +116,10 @@ export async function autoGenerateQuote(payload: any, token: string) {
   return res.json();
 }
 
-// Quote functions (now require authentication)
+// Quote functions (now use Next.js API routes)
 export async function calcQuote(payload: any) {
   const token = localStorage.getItem('token')
-  const res = await fetch(`${API_BASE}/quotes/calc`, {
+  const res = await fetch(`${API_BASE}/api/quotes/calc`, {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
@@ -141,7 +141,7 @@ export async function createQuote(payload: any) {
   console.log('createQuote called with payload:', payload)
   console.log('Using token:', token ? token.slice(0, 20) + '...' : 'NO TOKEN')
   
-  const res = await fetch(`${API_BASE}/quotes`, {
+  const res = await fetch(`${API_BASE}/api/quotes`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -165,7 +165,7 @@ export async function createQuote(payload: any) {
 }
 
 export async function getQuotes(token: string) {
-  const res = await fetch(`${API_BASE}/quotes`, {
+  const res = await fetch(`${API_BASE}/api/quotes`, {
     headers: {
       'Authorization': `Bearer ${token}`
     }
@@ -180,7 +180,7 @@ export async function getQuotes(token: string) {
 }
 
 export async function getQuoteAdjustments(quoteId: string, token: string) {
-  const res = await fetch(`${API_BASE}/quotes/${quoteId}/adjustments`, {
+  const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/adjustments`, {
     headers: {
       'Authorization': `Bearer ${token}`
     }
@@ -195,7 +195,7 @@ export async function getQuoteAdjustments(quoteId: string, token: string) {
 }
 
 export async function generatePDF(quoteId: string, token: string) {
-  const res = await fetch(`${API_BASE}/quotes/${quoteId}/pdf`, {
+  const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/pdf`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`

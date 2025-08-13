@@ -502,7 +502,7 @@ def create_project_requirements(
     Returns:
         Created ProjectRequirements instance
     """
-    db_requirements = models.ProjectRequirements(**requirements.dict())
+    db_requirements = models.ProjectRequirements(**requirements.model_dump())
     db.add(db_requirements)
     db.commit()
     db.refresh(db_requirements)

@@ -34,7 +34,7 @@ class RuleEvaluator:
         self.requirements = requirements
         self.variables = self._extract_variables()
 
-    def _extract_variables(self) -> Dict[str, Union[Decimal, bool, str]]:
+    def _extract_variables(self) -> Dict[str, Union[float, bool, str]]:
         """
         Extract variables from project requirements for rule evaluation.
 

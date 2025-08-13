@@ -10,6 +10,8 @@ from sqlalchemy import (
     String,
     Text,
     text,
+    Integer,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
@@ -41,6 +43,7 @@ class User(Base):
     # Relationships
     tenant = relationship("Tenant", back_populates="users")
     quotes = relationship("Quote", back_populates="user")
+    adjustment_logs = relationship("QuoteAdjustmentLog", back_populates="user")
 
 
 class Company(Base):
@@ -57,6 +60,9 @@ class Company(Base):
     quotes = relationship("Quote", back_populates="company")
     project_requirements = relationship("ProjectRequirements", back_populates="company")
     generation_rules = relationship("GenerationRule", back_populates="company")
+    quote_events = relationship("QuoteEvent", back_populates="company")
+    adjustment_logs = relationship("QuoteAdjustmentLog", back_populates="company")
+    auto_tuning_patterns = relationship("AutoTuningPattern", back_populates="company")
 
 
 class PriceProfile(Base):
@@ -196,29 +202,27 @@ class QuoteItem(Base):
 
 class QuoteEvent(Base):
     """
-    Quote events for tracking customer interactions.
+    Quote events for tracking and analytics.
 
-    Tracks events like when a quote is sent, opened, accepted, or declined.
-    All events are scoped by quote_id and include metadata for additional context.
+    Tracks various events like quote creation, sending, opening, acceptance, etc.
+    All events are scoped by company_id for multi-tenant security.
     """
 
     __tablename__ = "quote_event"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    quote_id = Column(
-        UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False
-    )
-    type = Column(String, nullable=False)  # sent, opened, accepted, declined
+    quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
+    event_type = Column(String, nullable=False)
+    metadata = Column(JSONB, nullable=True)  # Additional event data
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
-    meta = Column(
-        JSONB, server_default="{}"
-    )  # Additional metadata (IP, user agent, etc.)
 
     # Relationships
     quote = relationship("Quote", back_populates="events")
+    company = relationship("Company", back_populates="quote_events")
 
     __table_args__ = (
         CheckConstraint(
-            "type IN ('sent', 'opened', 'accepted', 'declined')",
+            "event_type IN ('created', 'sent', 'opened', 'accepted', 'declined', 'expired')",
             name="valid_event_type",
         ),
     )
@@ -275,26 +279,54 @@ Tenant.companies = relationship("Company", back_populates="tenant")
 
 class QuoteAdjustmentLog(Base):
     """
-    Log of quantity adjustments made to quote items.
+    Log of user adjustments to auto-generated quote items.
 
-    Tracks when users modify quantities from auto-generated values,
-    providing audit trail for changes made before saving quotes.
+    Tracks how users modify auto-generated quantities and prices for auto-tuning.
+    All queries are scoped by company_id for multi-tenant security.
     """
 
     __tablename__ = "quote_adjustment_log"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id"), nullable=False)
-    item_ref = Column(
-        Text, nullable=False
-    )  # Reference to the item (e.g., "SNICK", "VVS")
-    old_qty = Column(
-        Numeric(12, 2), nullable=False
-    )  # Original quantity from auto-generation
-    new_qty = Column(
-        Numeric(12, 2), nullable=False
-    )  # New quantity after user adjustment
-    reason = Column(Text, nullable=True)  # Optional reason for the change
+    quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=False)
+    item_ref = Column(String, nullable=False)  # Reference to the adjusted item
+    item_kind = Column(String, nullable=False)  # labor, material, custom
+    original_qty = Column(Numeric(12, 2), nullable=False)
+    adjusted_qty = Column(Numeric(12, 2), nullable=False)
+    original_unit_price = Column(Numeric(12, 2), nullable=False)
+    adjusted_unit_price = Column(Numeric(12, 2), nullable=False)
+    adjustment_reason = Column(String, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
     # Relationships
     quote = relationship("Quote", back_populates="adjustment_logs")
+    company = relationship("Company", back_populates="adjustment_logs")
+    user = relationship("User", back_populates="adjustment_logs")
+
+
+class AutoTuningPattern(Base):
+    """
+    Auto-tuning patterns learned from user adjustments.
+
+    Stores learned adjustment factors for different combinations of room type,
+    finish level, and item references. Used to improve future auto-generation.
+    All queries are scoped by company_id for multi-tenant security.
+    """
+
+    __tablename__ = "auto_tuning_patterns"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("company.id"), nullable=False)
+    pattern_key = Column(String, nullable=False)  # Format: "roomType|finishLevel|itemRef"
+    adjustment_factor = Column(Numeric(8, 4), nullable=False)  # Multiplier for quantities
+    confidence_score = Column(Numeric(5, 4), nullable=False)  # 0.0-1.0
+    sample_count = Column(Integer, nullable=False, server_default=text("0"))
+    last_adjusted_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False)
+
+    # Relationships
+    company = relationship("Company", back_populates="auto_tuning_patterns")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "pattern_key", name="uq_company_pattern"),
+    )

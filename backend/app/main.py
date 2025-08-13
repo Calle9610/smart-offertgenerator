@@ -16,8 +16,9 @@ from sqlalchemy.orm import Session
 from weasyprint import HTML
 
 from . import auth, crud, schemas
+from .auto_tuning import create_auto_tuning_engine
 from .db import Base, engine, get_db
-from .models import Company, LaborRate, Material, PriceProfile, Tenant, User
+from .models import Company, LaborRate, Material, PriceProfile, Tenant, User, Quote, QuotePackage, QuoteAdjustmentLog
 from .pricing import calc_totals
 from .rule_evaluator import RuleEvaluator
 
@@ -431,7 +432,7 @@ async def update_project_requirements(
 
     # Update requirements with company scoping
     updated_requirements = crud.update_project_requirements(
-        db, uuid.UUID(requirements_id), company_id, {"data": requirements.dict()}
+        db, uuid.UUID(requirements_id), company_id, {"data": requirements.model_dump()}
     )
 
     if not updated_requirements:
@@ -780,14 +781,60 @@ async def auto_generate_quote(
         # Calculate totals
         subtotal = sum(item.line_total for item in generated_items)
         vat = subtotal * float(profile.vat_rate) / 100.0
-        total = subtotal + vat
+
+        # Apply auto-tuning if available
+        tuning_applied = False
+        tuning_insights = None
+
+        try:
+            # Create auto-tuning engine
+            tuning_engine = create_auto_tuning_engine(db, company_id)
+
+            # Convert items to dict format for tuning
+            items_dict = [
+                {
+                    "kind": item.kind,
+                    "ref": item.ref,
+                    "description": item.description,
+                    "qty": item.qty,
+                    "unit": item.unit,
+                    "unit_price": item.unit_price,
+                    "line_total": item.line_total,
+                }
+                for item in generated_items
+            ]
+
+            # Apply auto-tuning
+            tuned_items_dict = tuning_engine.apply_tuning_to_generation(
+                schemas.ProjectRequirementsIn(**requirements.data),
+                items_dict
+            )
+
+            # Update generated items with tuning results
+            for i, tuned_item in enumerate(tuned_items_dict):
+                if "tuning_confidence" in tuned_item:
+                    generated_items[i].qty = tuned_item["qty"]
+                    generated_items[i].line_total = tuned_item["line_total"]
+                    tuning_applied = True
+
+            # Get tuning insights if tuning was applied
+            if tuning_applied:
+                tuning_insights = tuning_engine.get_tuning_insights()
+
+        except Exception as e:
+            # Log error but continue without tuning
+            print(f"Auto-tuning error (non-critical): {e}")
+            pass
+
+        # Calculate overall confidence score
+        overall_confidence = sum(confidence_levels) / len(confidence_levels) if confidence_levels else 0.0
 
         return schemas.AutoGenerateResponse(
             items=generated_items,
-            subtotal=subtotal,
-            vat=vat,
-            total=total,
-            confidence_per_item=confidence_levels,
+            total_items=len(generated_items),
+            confidence_score=overall_confidence,
+            tuning_applied=tuning_applied,
+            tuning_insights=tuning_insights,
         )
 
     except Exception as e:
@@ -1292,8 +1339,8 @@ async def accept_public_quote(
         # Get package name for event logging
         package_name = "Unknown"
         try:
-            package = db.query(models.QuotePackage).filter(
-                models.QuotePackage.id == accept_request.packageId
+            package = db.query(QuotePackage).filter(
+                QuotePackage.id == accept_request.packageId
             ).first()
             if package:
                 package_name = package.name
@@ -1682,3 +1729,168 @@ def log_quantity_changes(
                     reason=f"User adjusted quantity from {old_qty} to {new_qty}",
                 ),
             )
+
+
+@app.post("/quotes/{quote_id}/adjustments", response_model=schemas.QuoteAdjustmentOut)
+async def log_quote_adjustment(
+    quote_id: str,
+    adjustment: schemas.QuoteAdjustmentIn,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Log a user adjustment to a quote item for auto-tuning analysis.
+    
+    This endpoint captures how users modify auto-generated quantities and prices,
+    enabling the system to learn and improve future auto-generation accuracy.
+    
+    Multi-tenant security: Only allows adjustments to quotes belonging to the user's company.
+    
+    Example:
+    ```bash
+    curl -X POST "http://localhost:8000/quotes/123e4567-e89b-12d3-a456-426614174000/adjustments" \
+         -H "Authorization: Bearer <token>" \
+         -H "Content-Type: application/json" \
+         -d '{
+           "item_ref": "SNICK",
+           "item_kind": "labor",
+           "original_qty": 8.0,
+           "adjusted_qty": 10.0,
+           "original_unit_price": 650.00,
+           "adjusted_unit_price": 650.00,
+           "adjustment_reason": "Behöver mer tid för detaljarbete"
+         }'
+    ```
+    """
+    # Get companies for the user
+    companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
+    if not companies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No company found for user"
+        )
+    
+    company_id = companies[0].id
+    
+    # Verify quote belongs to user's company
+    quote = db.query(Quote).filter(
+        Quote.id == uuid.UUID(quote_id),
+        Quote.company_id == company_id
+    ).first()
+    
+    if not quote:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found"
+        )
+    
+    # Create auto-tuning engine and log adjustment
+    tuning_engine = create_auto_tuning_engine(db, company_id)
+    tuning_engine.log_adjustment(
+        quote_id=uuid.UUID(quote_id),
+        user_id=current_user.id,
+        item_ref=adjustment.item_ref,
+        item_kind=adjustment.item_kind,
+        original_qty=adjustment.original_qty,
+        adjusted_qty=adjustment.adjusted_qty,
+        original_unit_price=adjustment.original_unit_price,
+        adjusted_unit_price=adjustment.adjusted_unit_price,
+        adjustment_reason=adjustment.adjustment_reason,
+    )
+    
+    # Return the logged adjustment
+    adjustment_log = db.query(QuoteAdjustmentLog).filter(
+        QuoteAdjustmentLog.quote_id == uuid.UUID(quote_id),
+        QuoteAdjustmentLog.item_ref == adjustment.item_ref,
+        QuoteAdjustmentLog.company_id == company_id
+    ).order_by(QuoteAdjustmentLog.created_at.desc()).first()
+    
+    if not adjustment_log:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to log adjustment"
+        )
+    
+    return adjustment_log
+
+
+@app.get("/auto-tuning/insights", response_model=schemas.AutoTuningInsightsResponse)
+async def get_auto_tuning_insights(
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get insights about auto-tuning patterns for analytics.
+    
+    Returns learned adjustment patterns that show how the system is improving
+    based on user feedback. Useful for understanding system accuracy and
+    identifying areas for improvement.
+    
+    Multi-tenant security: Only returns insights for the user's company.
+    
+    Example:
+    ```bash
+    curl -X GET "http://localhost:8000/auto-tuning/insights" \
+         -H "Authorization: Bearer <token>"
+    ```
+    
+    Response includes:
+    - Adjustment patterns for different room types and finish levels
+    - Confidence scores for each pattern
+    - Human-readable interpretations of adjustments
+    - Suggestions for improving system accuracy
+    """
+    # Get companies for the user
+    companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
+    if not companies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No company found for user"
+        )
+    
+    company_id = companies[0].id
+    
+    # Get auto-tuning insights
+    tuning_engine = create_auto_tuning_engine(db, company_id)
+    insights = tuning_engine.get_tuning_insights()
+    
+    # Calculate summary statistics
+    total_patterns = len(insights)
+    if total_patterns > 0:
+        average_confidence = sum(insight["confidence_score"] for insight in insights) / total_patterns
+        
+        # Find most adjusted item
+        item_counts = {}
+        for insight in insights:
+            item_ref = insight["item_ref"]
+            item_counts[item_ref] = item_counts.get(item_ref, 0) + insight["sample_count"]
+        
+        most_adjusted_item = max(item_counts.items(), key=lambda x: x[1])[0] if item_counts else None
+        
+        # Generate improvement suggestions
+        improvement_suggestions = []
+        low_confidence_patterns = [insight for insight in insights if insight["confidence_score"] < 0.7]
+        if low_confidence_patterns:
+            improvement_suggestions.append(
+                f"Flera mönster har låg konfidens ({len(low_confidence_patterns)} st). "
+                "Överväg att samla in mer data för dessa kombinationer."
+            )
+        
+        extreme_adjustments = [insight for insight in insights if insight["adjustment_factor"] > 2.0 or insight["adjustment_factor"] < 0.5]
+        if extreme_adjustments:
+            improvement_suggestions.append(
+                f"Flera mönster visar extrema justeringar ({len(extreme_adjustments)} st). "
+                "Kontrollera grundreglerna för dessa kombinationer."
+            )
+        
+        if not improvement_suggestions:
+            improvement_suggestions.append("Systemet lär sig bra från användarjusteringar. Fortsätt att använda auto-generering.")
+    else:
+        average_confidence = 0.0
+        most_adjusted_item = None
+        improvement_suggestions = ["Inga justeringsmönster ännu. Systemet kommer att lära sig när du börjar justera offerter."]
+    
+    return schemas.AutoTuningInsightsResponse(
+        insights=insights,
+        total_patterns=total_patterns,
+        average_confidence=average_confidence,
+        most_adjusted_item=most_adjusted_item,
+        improvement_suggestions=improvement_suggestions,
+    )

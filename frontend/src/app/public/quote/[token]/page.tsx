@@ -2,31 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-
-interface PublicQuoteItem {
-  kind: string
-  description?: string
-  qty: string
-  unit: string
-  unit_price: string
-  line_total: string
-}
-
-interface PublicQuote {
-  company_name?: string
-  project_name?: string
-  customer_name: string
-  currency: string
-  items: PublicQuoteItem[]
-  subtotal: string
-  vat: string
-  total: string
-  summary?: string
-  assumptions?: string
-  exclusions?: string
-  timeline?: string
-  created_at: string
-}
+import { PublicQuote, PublicQuotePackage, AcceptQuoteRequest } from '@/types/public-quote'
 
 export default function PublicQuotePage() {
   const params = useParams()
@@ -35,75 +11,75 @@ export default function PublicQuotePage() {
   const [quote, setQuote] = useState<PublicQuote | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [actionResult, setActionResult] = useState<string | null>(null)
-  const [actionLoading, setActionLoading] = useState(false)
+  const [accepting, setAccepting] = useState<string | null>(null)
+  const [acceptedPackage, setAcceptedPackage] = useState<string | null>(null)
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
 
-  // Fetch quote data on component mount
   useEffect(() => {
     fetchQuote()
-  }, [])
+  }, [token])
 
   const fetchQuote = async () => {
     try {
       setLoading(true)
-      setError(null)
-      
-      // Use relative URL to avoid CORS and environment variable issues
-      // The backend is accessible via the same hostname in production
       const response = await fetch(`/api/public/quotes/${token}`)
       
       if (!response.ok) {
-        if (response.status === 404) {
-          setError('Offerten kunde inte hittas. Länken kan vara ogiltig eller ha gått ut.')
-        } else {
-          setError('Ett fel uppstod när offerten skulle hämtas.')
-        }
-        return
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Kunde inte hämta offerten')
       }
       
       const data = await response.json()
       setQuote(data)
+      if (data.accepted_package_id) {
+        setAcceptedPackage(data.accepted_package_id)
+      }
     } catch (err) {
-      setError('Kunde inte ansluta till servern. Kontrollera din internetanslutning.')
+      setError(err instanceof Error ? err.message : 'Ett fel uppstod')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleAction = async (action: 'accept' | 'decline') => {
+  const handleAcceptPackage = async (packageId: string) => {
     try {
-      setActionLoading(true)
-      setActionResult(null)
-      
-      // Use relative URL to avoid CORS and environment variable issues
-      const response = await fetch(`/api/public/quotes/${token}/${action}`, {
+      setAccepting(packageId)
+      const response = await fetch(`/api/public/quotes/${token}/accept`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ packageId } as AcceptQuoteRequest),
       })
-      
+
       if (!response.ok) {
         const errorData = await response.json()
-        setActionResult(`Fel: ${errorData.detail || 'Ett oväntat fel uppstod'}`)
-        return
+        throw new Error(errorData.detail || 'Kunde inte acceptera offerten')
       }
+
+      const data = await response.json()
+      setAcceptedPackage(packageId)
+      setQuote(prev => prev ? { ...prev, accepted_package_id: packageId } : null)
       
-      const result = await response.json()
-      
-      if (action === 'accept') {
-        setActionResult('Tack för din acceptans! Vi återkommer snart med mer information.')
-      } else {
-        setActionResult('Tack för din återkoppling. Vi återkommer om du har frågor.')
-      }
-      
-      // Refresh quote data to show updated status
-      setTimeout(() => {
-        fetchQuote()
-      }, 1000)
-      
+      // Visa bekräftelse
+      alert(`✅ Offerten accepterad! Du har valt ${quote?.packages.find(p => p.id === packageId)?.name} paketet.`)
     } catch (err) {
-      setActionResult('Ett fel uppstod. Försök igen senare.')
+      alert(`❌ Fel: ${err instanceof Error ? err.message : 'Kunde inte acceptera offerten'}`)
     } finally {
-      setActionLoading(false)
+      setAccepting(null)
     }
+  }
+
+  const toggleExpandedItems = (packageId: string) => {
+    setExpandedItems(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(packageId)) {
+        newSet.delete(packageId)
+      } else {
+        newSet.add(packageId)
+      }
+      return newSet
+    })
   }
 
   if (loading) {
@@ -111,207 +87,196 @@ export default function PublicQuotePage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Hämtar offert...</p>
+          <p className="text-gray-600">Laddar offert...</p>
         </div>
       </div>
     )
   }
 
-  if (error) {
+  if (error || !quote) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="max-w-md mx-auto text-center p-6">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Offert inte tillgänglig</h1>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button 
-            onClick={fetchQuote}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Försök igen
-          </button>
+        <div className="text-center">
+          <div className="text-red-600 text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Offert kunde inte hittas</h1>
+          <p className="text-gray-600 mb-4">{error || 'Offerten finns inte eller har gått ut'}</p>
+          <a href="/" className="text-blue-600 hover:text-blue-800 underline">
+            Gå tillbaka till startsidan
+          </a>
         </div>
       </div>
     )
   }
 
-  if (!quote) {
-    return null
-  }
+  const defaultPackage = quote.packages.find(p => p.is_default)
+  const premiumPackage = quote.packages.find(p => p.name.toLowerCase().includes('premium'))
+  const standardPackage = quote.packages.find(p => p.name.toLowerCase().includes('standard'))
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="text-center mb-6">
-            {quote.company_name && (
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">{quote.company_name}</h2>
-            )}
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Offert för {quote.customer_name}
+            </h1>
             {quote.project_name && (
-              <h3 className="text-lg text-gray-700 mb-1">{quote.project_name}</h3>
+              <p className="text-xl text-gray-600">{quote.project_name}</p>
             )}
-            <p className="text-gray-600">För: {quote.customer_name}</p>
+            <p className="text-sm text-gray-500 mt-2">
+              Skapad: {new Date(quote.created_at).toLocaleDateString('sv-SE')}
+            </p>
           </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Package Selection */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+            Välj ditt paket
+          </h2>
           
-          <div className="text-center text-sm text-gray-500">
-            Skapad: {new Date(quote.created_at).toLocaleDateString('sv-SE')}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {quote.packages.map((pkg) => (
+              <div
+                key={pkg.id}
+                className={`relative bg-white rounded-lg shadow-lg border-2 transition-all duration-200 hover:shadow-xl ${
+                  acceptedPackage === pkg.id
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-200 hover:border-blue-300'
+                }`}
+              >
+                {/* Badges */}
+                <div className="absolute -top-3 left-4 right-4 flex justify-center">
+                  {pkg.is_default && (
+                    <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+                      Bäst värde
+                    </span>
+                  )}
+                  {pkg.name.toLowerCase().includes('premium') && (
+                    <span className="bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full ml-2">
+                      Premium
+                    </span>
+                  )}
+                </div>
+
+                {/* Package Header */}
+                <div className="p-6 pt-8">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">{pkg.name}</h3>
+                  <div className="text-3xl font-bold text-blue-600 mb-4">
+                    {pkg.total} {quote.currency}
+                  </div>
+                  
+                  {/* Package Details */}
+                  <div className="space-y-2 text-sm text-gray-600 mb-6">
+                    <div className="flex justify-between">
+                      <span>Delsumma:</span>
+                      <span>{pkg.subtotal} {quote.currency}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Moms:</span>
+                      <span>{pkg.vat} {quote.currency}</span>
+                    </div>
+                  </div>
+
+                  {/* Accept Button */}
+                  {acceptedPackage === pkg.id ? (
+                    <div className="text-center">
+                      <div className="bg-green-100 text-green-800 px-4 py-2 rounded-md font-medium">
+                        ✅ Accepterad
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleAcceptPackage(pkg.id)}
+                      disabled={accepting === pkg.id}
+                      className={`w-full py-3 px-4 rounded-md font-medium transition-colors ${
+                        accepting === pkg.id
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {accepting === pkg.id ? 'Accepterar...' : `Acceptera ${pkg.name}`}
+                    </button>
+                  )}
+                </div>
+
+                {/* Expandable Items */}
+                <div className="border-t border-gray-100">
+                  <button
+                    onClick={() => toggleExpandedItems(pkg.id)}
+                    className="w-full px-6 py-3 text-left text-sm text-blue-600 hover:text-blue-800 hover:bg-gray-50 transition-colors"
+                  >
+                    {expandedItems.has(pkg.id) ? '▼ Dölj detaljer' : '▶ Visa detaljer'}
+                  </button>
+                  
+                  {expandedItems.has(pkg.id) && (
+                    <div className="px-6 pb-6">
+                      <div className="space-y-3">
+                        {pkg.items.map((item) => (
+                          <div key={item.id} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900">{item.description || item.kind}</div>
+                              <div className="text-sm text-gray-500">
+                                {item.qty} {item.unit} × {item.unit_price} {quote.currency}
+                              </div>
+                            </div>
+                            <div className="text-right font-medium text-gray-900">
+                              {item.line_total} {quote.currency}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Quote Items Table */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Offertrader</h3>
-          
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Typ
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Beskrivning
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Antal
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Enhet
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Á-pris
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Radsumma
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {quote.items.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        item.kind === 'labor' ? 'bg-blue-100 text-blue-800' :
-                        item.kind === 'material' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {item.kind === 'labor' ? 'Arbete' :
-                         item.kind === 'material' ? 'Material' : 'Övrigt'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-4 text-sm text-gray-900">
-                      {item.description || '-'}
-                    </td>
-                    <td className="px-3 py-4 text-sm text-gray-900 text-right">
-                      {parseFloat(item.qty).toLocaleString('sv-SE')}
-                    </td>
-                    <td className="px-3 py-4 text-sm text-gray-900 text-right">
-                      {item.unit}
-                    </td>
-                    <td className="px-3 py-4 text-sm text-gray-900 text-right">
-                      {parseFloat(item.unit_price).toLocaleString('sv-SE')} {quote.currency}
-                    </td>
-                    <td className="px-3 py-4 text-sm font-medium text-gray-900 text-right">
-                      {parseFloat(item.line_total).toLocaleString('sv-SE')} {quote.currency}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Summary */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex justify-end">
-            <div className="w-64 space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Delsumma:</span>
-                <span className="font-medium">{parseFloat(quote.subtotal).toLocaleString('sv-SE')} {quote.currency}</span>
+        {/* Quote Summary */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <h3 className="text-xl font-bold text-gray-900 mb-4">Offertsammanfattning</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-semibold text-gray-700 mb-2">Kundinformation</h4>
+              <div className="space-y-1 text-sm text-gray-600">
+                <p><strong>Kund:</strong> {quote.customer_name}</p>
+                {quote.project_name && (
+                  <p><strong>Projekt:</strong> {quote.project_name}</p>
+                )}
+                <p><strong>Status:</strong> {quote.status}</p>
+                <p><strong>Valuta:</strong> {quote.currency}</p>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Moms ({parseFloat(quote.vat) / parseFloat(quote.subtotal) * 100}%):</span>
-                <span className="font-medium">{parseFloat(quote.vat).toLocaleString('sv-SE')} {quote.currency}</span>
-              </div>
-              <div className="border-t pt-3 flex justify-between text-lg font-bold">
-                <span>Totalt:</span>
-                <span>{parseFloat(quote.total).toLocaleString('sv-SE')} {quote.currency}</span>
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-700 mb-2">Totalsumma</h4>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Delsumma:</span>
+                  <span className="font-medium">{quote.subtotal} {quote.currency}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Moms:</span>
+                  <span className="font-medium">{quote.vat} {quote.currency}</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold text-blue-600 border-t pt-2">
+                  <span>Totalt:</span>
+                  <span>{quote.total} {quote.currency}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Additional Information */}
-        {(quote.summary || quote.assumptions || quote.exclusions || quote.timeline) && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Ytterligare information</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {quote.summary && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Sammanfattning</h4>
-                  <p className="text-gray-600 text-sm">{quote.summary}</p>
-                </div>
-              )}
-              
-              {quote.assumptions && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Förutsättningar</h4>
-                  <p className="text-gray-600 text-sm">{quote.assumptions}</p>
-                </div>
-              )}
-              
-              {quote.exclusions && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Ej inkluderat</h4>
-                  <p className="text-gray-600 text-sm">{quote.exclusions}</p>
-                </div>
-              )}
-              
-              {quote.timeline && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Tidsplan</h4>
-                  <p className="text-gray-600 text-sm">{quote.timeline}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">Vad tycker du om offerten?</h3>
-          
-          {actionResult ? (
-            <div className="text-center">
-              <div className="text-green-600 text-lg mb-4">✅ {actionResult}</div>
-              <button 
-                onClick={() => setActionResult(null)}
-                className="text-blue-600 hover:text-blue-800 underline"
-              >
-                Stäng meddelande
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button
-                onClick={() => handleAction('accept')}
-                disabled={actionLoading}
-                className="flex-1 sm:flex-none bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                {actionLoading ? 'Bearbetar...' : 'Acceptera offert'}
-              </button>
-              
-              <button
-                onClick={() => handleAction('decline')}
-                disabled={actionLoading}
-                className="flex-1 sm:flex-none bg-red-600 text-white px-8 py-3 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                {actionLoading ? 'Bearbetar...' : 'Avböj offert'}
-              </button>
-            </div>
-          )}
+        {/* Footer */}
+        <div className="text-center text-gray-500 text-sm">
+          <p>Denna offert är giltig i 30 dagar från skapandedatum</p>
+          <p className="mt-1">För frågor, kontakta oss via telefon eller e-post</p>
         </div>
       </div>
     </div>

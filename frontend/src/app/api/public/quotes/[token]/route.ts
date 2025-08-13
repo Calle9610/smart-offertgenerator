@@ -5,24 +5,29 @@ export async function GET(
   { params }: { params: { token: string } }
 ) {
   try {
-    const token = params.token
-    
-    // Proxy request to backend
-    const backendUrl = process.env.BACKEND_URL || 'http://backend:8000'
-    const response = await fetch(`${backendUrl}/public/quotes/${token}`)
-    
-    if (!response.ok) {
+    const { token } = params
+    const backendResponse = await fetch(
+      `${process.env.BACKEND_URL || 'http://localhost:8000'}/public/quotes/${token}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    if (!backendResponse.ok) {
+      const errorData = await backendResponse.json()
       return NextResponse.json(
-        { detail: 'Quote not found' },
-        { status: response.status }
+        { detail: errorData.detail || 'Failed to fetch public quote' },
+        { status: backendResponse.status }
       )
     }
-    
-    const data = await response.json()
+
+    const data = await backendResponse.json()
     return NextResponse.json(data)
-    
   } catch (error) {
-    console.error('Error fetching public quote:', error)
+    console.error('Error in public quote API route:', error)
     return NextResponse.json(
       { detail: 'Internal server error' },
       { status: 500 }
