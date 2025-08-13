@@ -3,7 +3,7 @@ import tempfile
 import time
 import traceback
 import uuid
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List
 from uuid import UUID
@@ -864,15 +864,21 @@ async def create_test_quote(
     """Create a test quote for testing purposes."""
     try:
         # Get first company for the user
-        company = db.query(Company).filter(Company.tenant_id == current_user.tenant_id).first()
+        company = (
+            db.query(Company)
+            .filter(Company.tenant_id == current_user.tenant_id)
+            .first()
+        )
         if not company:
             raise HTTPException(status_code=404, detail="No company found")
-        
+
         # Get first price profile
-        profile = db.query(PriceProfile).filter(PriceProfile.company_id == company.id).first()
+        profile = (
+            db.query(PriceProfile).filter(PriceProfile.company_id == company.id).first()
+        )
         if not profile:
             raise HTTPException(status_code=404, detail="No price profile found")
-        
+
         # Create test quote
         quote_data = {
             "company_id": str(company.id),
@@ -889,19 +895,23 @@ async def create_test_quote(
                     "description": "Test Labor",
                     "qty": Decimal("10"),
                     "unit": "hour",
-                    "unit_price": Decimal("100.00")
+                    "unit_price": Decimal("100.00"),
                 }
-            ]
+            ],
         }
-        
-        quote_id = crud.create_quote(db, current_user.tenant_id, current_user.id, quote_data)
-        
+
+        quote_id = crud.create_quote(
+            db, current_user.tenant_id, current_user.id, quote_data
+        )
+
         return {"message": "Test quote created", "quote_id": quote_id}
-        
+
     except Exception as e:
         print(f"Error creating test quote: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to create test quote: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create test quote: {str(e)}"
+        )
 
 
 # Quote send endpoint
@@ -920,26 +930,29 @@ async def send_quote(
         )
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
-        
+
         # Validate quote status - only draft or reviewed quotes can be sent
         if quote.status not in ["draft", "reviewed"]:
             raise HTTPException(
-                status_code=400, 
-                detail=f"Quote cannot be sent in status '{quote.status}'. Only 'draft' or 'reviewed' quotes can be sent."
+                status_code=400,
+                detail=f"Quote cannot be sent in status '{quote.status}'. Only 'draft' or 'reviewed' quotes can be sent.",
             )
-        
+
         # Ensure quote has a public_token, generate if missing
         if not quote.public_token:
             import secrets
+
             quote.public_token = secrets.token_hex(16)
             db.commit()
             db.refresh(quote)
-            print(f"Generated missing public_token for quote {quote_id}: {quote.public_token}")
-        
+            print(
+                f"Generated missing public_token for quote {quote_id}: {quote.public_token}"
+            )
+
         # Generate public URL
         public_app_url = os.getenv("PUBLIC_APP_URL", "http://localhost:3000")
         public_url = f"{public_app_url}/public/quote/{quote.public_token}"
-        
+
         # Send email via stub (placeholder for SendGrid integration)
         print(f"📧 SENDING QUOTE EMAIL:")
         print(f"   To: {send_request.toEmail}")
@@ -950,18 +963,20 @@ async def send_quote(
         if send_request.message:
             print(f"   Custom Message: {send_request.message}")
         print(f"   Status: {quote.status} → SENT")
-        
+
         # Include tracking pixel in email stub
         public_api_url = os.getenv("PUBLIC_API_URL", "http://localhost:8000")
         tracking_pixel_url = f"{public_api_url}/public/pixel/{quote.public_token}.png"
         print(f"   Tracking Pixel: {tracking_pixel_url}")
-        print(f"   Email HTML would include: <img src=\"{tracking_pixel_url}\" width=\"1\" height=\"1\" />")
-        
+        print(
+            f'   Email HTML would include: <img src="{tracking_pixel_url}" width="1" height="1" />'
+        )
+
         # Update quote status to SENT
         quote.status = "SENT"
         db.commit()
         db.refresh(quote)
-        
+
         # Create quote event for tracking
         event = crud.create_quote_event(
             db,
@@ -973,28 +988,29 @@ async def send_quote(
                     "url": public_url,
                     "message": send_request.message,
                     "sent_by": current_user.username,
-                    "sent_at": quote.updated_at.isoformat() if hasattr(quote, 'updated_at') else None
-                }
-            )
+                    "sent_at": (
+                        quote.updated_at.isoformat()
+                        if hasattr(quote, "updated_at")
+                        else None
+                    ),
+                },
+            ),
         )
-        
+
         print(f"✅ Quote sent successfully! Event ID: {event.id}")
-        
+
         return schemas.QuoteSendResponse(
             sent=True,
             public_url=public_url,
-            message=f"Quote sent successfully to {send_request.toEmail}"
+            message=f"Quote sent successfully to {send_request.toEmail}",
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error sending quote: {e}")
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to send quote: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to send quote: {str(e)}")
 
 
 # Simple in-memory cache for rate-limiting opened events
@@ -1014,14 +1030,16 @@ async def get_public_quote(
         quote = crud.get_quote_by_public_token(db, token)
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
-        
+
         # Rate-limited opened event tracking (once per 10 minutes per token)
         current_time = datetime.now().timestamp()
         cache_key = f"opened_{token}"
-        
-        if cache_key not in _opened_events_cache or \
-           current_time - _opened_events_cache[cache_key] > 600:  # 10 minutes = 600 seconds
-            
+
+        if (
+            cache_key not in _opened_events_cache
+            or current_time - _opened_events_cache[cache_key] > 600
+        ):  # 10 minutes = 600 seconds
+
             # Create opened event
             try:
                 event = crud.create_quote_event(
@@ -1032,26 +1050,28 @@ async def get_public_quote(
                         meta={
                             "ip": "unknown",  # Could extract from request if needed
                             "user_agent": "unknown",  # Could extract from request if needed
-                            "opened_at": datetime.now().isoformat()
-                        }
-                    )
+                            "opened_at": datetime.now().isoformat(),
+                        },
+                    ),
                 )
                 print(f"📖 Quote opened event created: {event.id}")
-                
+
                 # Update cache
                 _opened_events_cache[cache_key] = current_time
-                
+
                 # Clean up old cache entries (keep only last 1000)
                 if len(_opened_events_cache) > 1000:
                     # Remove oldest entries
-                    sorted_cache = sorted(_opened_events_cache.items(), key=lambda x: x[1])
+                    sorted_cache = sorted(
+                        _opened_events_cache.items(), key=lambda x: x[1]
+                    )
                     _opened_events_cache.clear()
                     _opened_events_cache.update(dict(sorted_cache[-500:]))
-                    
+
             except Exception as e:
                 print(f"Warning: Could not create opened event: {e}")
                 # Don't fail the request if event creation fails
-        
+
         # Get company name if available
         company_name = None
         try:
@@ -1060,25 +1080,27 @@ async def get_public_quote(
                 company_name = company.name
         except Exception:
             pass  # Don't fail if company lookup fails
-        
+
         # Convert items to public format
         public_items = []
         for item in quote.items:
-            public_items.append(schemas.PublicQuoteItem(
-                kind=item.kind,
-                description=item.description,
-                qty=item.qty,
-                unit=item.unit or "",
-                unit_price=item.unit_price,
-                line_total=item.line_total
-            ))
-        
+            public_items.append(
+                schemas.PublicQuoteItem(
+                    kind=item.kind,
+                    description=item.description,
+                    qty=item.qty,
+                    unit=item.unit or "",
+                    unit_price=item.unit_price,
+                    line_total=item.line_total,
+                )
+            )
+
         # Get additional fields from project requirements if available
         summary = None
         assumptions = None
         exclusions = None
         timeline = None
-        
+
         try:
             requirements = crud.get_project_requirements_by_quote(
                 db, quote.id, quote.company_id
@@ -1091,7 +1113,7 @@ async def get_public_quote(
                 timeline = data.get("timeline")
         except Exception:
             pass  # Don't fail if requirements lookup fails
-        
+
         return schemas.PublicQuote(
             company_name=company_name,
             project_name=quote.project_name,
@@ -1105,18 +1127,15 @@ async def get_public_quote(
             assumptions=assumptions,
             exclusions=exclusions,
             timeline=timeline,
-            created_at=quote.created_at.isoformat() if quote.created_at else ""
+            created_at=quote.created_at.isoformat() if quote.created_at else "",
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error getting public quote: {e}")
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve quote"
-        )
+        raise HTTPException(status_code=500, detail="Failed to retrieve quote")
 
 
 # Accept quote endpoint (no authentication required)
@@ -1131,23 +1150,23 @@ async def accept_public_quote(
         quote = crud.get_quote_by_public_token(db, token)
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
-        
+
         # Check if already accepted (idempotency) - check this FIRST
         if quote.status == "ACCEPTED":
             return {"message": "Quote already accepted", "status": "ACCEPTED"}
-        
+
         # Check if quote can be accepted (only SENT or REVIEWED status)
         if quote.status not in ["SENT", "REVIEWED"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Quote cannot be accepted in status '{quote.status}'. Only 'SENT' or 'REVIEWED' quotes can be accepted."
+                detail=f"Quote cannot be accepted in status '{quote.status}'. Only 'SENT' or 'REVIEWED' quotes can be accepted.",
             )
-        
+
         # Update quote status to ACCEPTED
         quote.status = "ACCEPTED"
         db.commit()
         db.refresh(quote)
-        
+
         # Create accepted event
         try:
             event = crud.create_quote_event(
@@ -1159,32 +1178,29 @@ async def accept_public_quote(
                         "ip": "unknown",  # Could extract from request if needed
                         "user_agent": "unknown",  # Could extract from request if needed
                         "accepted_at": datetime.now().isoformat(),
-                        "previous_status": quote.status
-                    }
-                )
+                        "previous_status": quote.status,
+                    },
+                ),
             )
             print(f"✅ Quote accepted event created: {event.id}")
         except Exception as e:
             print(f"Warning: Could not create accepted event: {e}")
             # Don't fail the request if event creation fails
-        
+
         print(f"🎉 Quote {quote.id} accepted! Status: {quote.status}")
-        
+
         return {
             "message": "Quote accepted successfully",
             "status": "ACCEPTED",
-            "quote_id": str(quote.id)
+            "quote_id": str(quote.id),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error accepting quote: {e}")
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to accept quote"
-        )
+        raise HTTPException(status_code=500, detail="Failed to accept quote")
 
 
 # Decline quote endpoint (no authentication required)
@@ -1199,23 +1215,23 @@ async def decline_public_quote(
         quote = crud.get_quote_by_public_token(db, token)
         if not quote:
             raise HTTPException(status_code=404, detail="Quote not found")
-        
+
         # Check if already declined (idempotency)
         if quote.status == "DECLINED":
             return {"message": "Quote already declined", "status": "DECLINED"}
-        
+
         # Check if quote can be declined (only SENT or REVIEWED status)
         if quote.status not in ["SENT", "REVIEWED"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Quote cannot be declined in status '{quote.status}'. Only 'SENT' or 'REVIEWED' quotes can be declined."
+                detail=f"Quote cannot be declined in status '{quote.status}'. Only 'SENT' or 'REVIEWED' quotes can be declined.",
             )
-        
+
         # Update quote status to DECLINED
         quote.status = "DECLINED"
         db.commit()
         db.refresh(quote)
-        
+
         # Create declined event
         try:
             event = crud.create_quote_event(
@@ -1227,32 +1243,29 @@ async def decline_public_quote(
                         "ip": "unknown",  # Could extract from request if needed
                         "user_agent": "unknown",  # Could extract from request if needed
                         "declined_at": datetime.now().isoformat(),
-                        "previous_status": quote.status
-                    }
-                )
+                        "previous_status": quote.status,
+                    },
+                ),
             )
             print(f"❌ Quote declined event created: {event.id}")
         except Exception as e:
             print(f"Warning: Could not create declined event: {e}")
             # Don't fail the request if event creation fails
-        
+
         print(f"💔 Quote {quote.id} declined! Status: {quote.status}")
-        
+
         return {
             "message": "Quote declined successfully",
             "status": "DECLINED",
-            "quote_id": str(quote.id)
+            "quote_id": str(quote.id),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error declining quote: {e}")
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to decline quote"
-        )
+        raise HTTPException(status_code=500, detail="Failed to decline quote")
 
 
 # Tracking pixel endpoint for email open tracking
@@ -1273,10 +1286,12 @@ async def tracking_pixel(
             # Rate-limited opened event tracking (once per 10 minutes per token)
             current_time = time.time()
             cache_key = f"opened_{token}"
-            
-            if cache_key not in _opened_events_cache or \
-               current_time - _opened_events_cache[cache_key] > 600:  # 10 minutes = 600 seconds
-                
+
+            if (
+                cache_key not in _opened_events_cache
+                or current_time - _opened_events_cache[cache_key] > 600
+            ):  # 10 minutes = 600 seconds
+
                 # Create opened event
                 try:
                     event = crud.create_quote_event(
@@ -1288,71 +1303,193 @@ async def tracking_pixel(
                                 "ip": "unknown",  # Could extract from request if needed
                                 "user_agent": "unknown",  # Could extract from request if needed
                                 "opened_at": datetime.now().isoformat(),
-                                "source": "tracking_pixel"
-                            }
-                        )
+                                "source": "tracking_pixel",
+                            },
+                        ),
                     )
                     print(f"📖 Quote opened event created via pixel: {event.id}")
-                    
+
                     # Update cache
                     _opened_events_cache[cache_key] = current_time
-                    
+
                 except Exception as e:
                     print(f"Warning: Could not create opened event via pixel: {e}")
                     # Don't fail the request if event creation fails
-        
+
         # Create 1x1 transparent PNG in memory
         # This is a minimal PNG file with transparency
-        png_data = bytes([
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG signature
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # 1x1 dimensions
-            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,  # Color type, compression, filter, interlace
-            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,  # IDAT chunk
-            0x54, 0x08, 0x99, 0x01, 0x01, 0x00, 0x00, 0x00,  # Compressed data (1 transparent pixel)
-            0xFF, 0xFF, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01,  # End of compressed data
-            0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,  # IEND chunk
-            0xAE, 0x42, 0x60, 0x82                           # IEND signature
-        ])
-        
+        png_data = bytes(
+            [
+                0x89,
+                0x50,
+                0x4E,
+                0x47,
+                0x0D,
+                0x0A,
+                0x1A,
+                0x0A,  # PNG signature
+                0x00,
+                0x00,
+                0x00,
+                0x0D,
+                0x49,
+                0x48,
+                0x44,
+                0x52,  # IHDR chunk
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x01,  # 1x1 dimensions
+                0x08,
+                0x02,
+                0x00,
+                0x00,
+                0x00,
+                0x90,
+                0x77,
+                0x53,  # Color type, compression, filter, interlace
+                0xDE,
+                0x00,
+                0x00,
+                0x00,
+                0x0C,
+                0x49,
+                0x44,
+                0x41,  # IDAT chunk
+                0x54,
+                0x08,
+                0x99,
+                0x01,
+                0x01,
+                0x00,
+                0x00,
+                0x00,  # Compressed data (1 transparent pixel)
+                0xFF,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x02,
+                0x00,
+                0x01,  # End of compressed data
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x49,
+                0x45,
+                0x4E,
+                0x44,  # IEND chunk
+                0xAE,
+                0x42,
+                0x60,
+                0x82,  # IEND signature
+            ]
+        )
+
         from fastapi.responses import Response
-        
+
         return Response(
             content=png_data,
             media_type="image/png",
             headers={
                 "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
                 "Pragma": "no-cache",
-                "Expires": "0"
-            }
+                "Expires": "0",
+            },
         )
-        
+
     except Exception as e:
         print(f"Error in tracking pixel: {e}")
         traceback.print_exc()
         # Return 1x1 transparent PNG even on error (for security)
-        png_data = bytes([
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
-            0x54, 0x08, 0x99, 0x01, 0x01, 0x00, 0x00, 0x00,
-            0xFF, 0xFF, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01,
-            0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,
-            0xAE, 0x42, 0x60, 0x82
-        ])
-        
+        png_data = bytes(
+            [
+                0x89,
+                0x50,
+                0x4E,
+                0x47,
+                0x0D,
+                0x0A,
+                0x1A,
+                0x0A,
+                0x00,
+                0x00,
+                0x00,
+                0x0D,
+                0x49,
+                0x48,
+                0x44,
+                0x52,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x08,
+                0x02,
+                0x00,
+                0x00,
+                0x00,
+                0x90,
+                0x77,
+                0x53,
+                0xDE,
+                0x00,
+                0x00,
+                0x00,
+                0x0C,
+                0x49,
+                0x44,
+                0x41,
+                0x54,
+                0x08,
+                0x99,
+                0x01,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x02,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x49,
+                0x45,
+                0x4E,
+                0x44,
+                0xAE,
+                0x42,
+                0x60,
+                0x82,
+            ]
+        )
+
         from fastapi.responses import Response
-        
+
         return Response(
             content=png_data,
             media_type="image/png",
             headers={
                 "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
                 "Pragma": "no-cache",
-                "Expires": "0"
-            }
+                "Expires": "0",
+            },
         )
 
 

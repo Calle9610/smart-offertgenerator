@@ -1,7 +1,7 @@
+import secrets
 from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
-import secrets
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -81,7 +81,7 @@ def create_quote(db: Session, tenant_id: UUID, user_id: UUID, data: dict) -> str
     """Create a quote with tenant and user context."""
     # Generate unique public token for customer access
     public_token = secrets.token_hex(16)  # 32-character hex string
-    
+
     q = models.Quote(
         tenant_id=tenant_id,
         company_id=data["company_id"],
@@ -134,7 +134,9 @@ def get_quote_by_id_and_tenant(
 
 def get_quote_by_public_token(db: Session, public_token: str) -> Optional[models.Quote]:
     """Get a quote by its public token for customer access."""
-    return db.query(models.Quote).filter(models.Quote.public_token == public_token).first()
+    return (
+        db.query(models.Quote).filter(models.Quote.public_token == public_token).first()
+    )
 
 
 # Quote Event operations

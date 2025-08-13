@@ -408,23 +408,25 @@ class QuoteOut(BaseModel):
 
 class QuoteEventCreate(BaseModel):
     """Schema for creating quote events."""
-    
+
     quote_id: UUID
     type: str = Field(..., description="Event type: sent, opened, accepted, declined")
-    meta: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+    meta: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="Additional metadata"
+    )
 
 
 class QuoteEventOut(BaseModel):
     """Schema for quote event output."""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     quote_id: UUID
     type: str
     created_at: str
     meta: Dict[str, Any]
-    
+
     @field_validator("created_at", mode="before")
     @classmethod
     def convert_datetime(cls, v):
@@ -436,9 +438,9 @@ class QuoteEventOut(BaseModel):
 
 class QuoteWithEvents(BaseModel):
     """Schema for quote with its events."""
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     customer_name: str
     project_name: Optional[str] = None
@@ -457,14 +459,16 @@ class QuoteWithEvents(BaseModel):
 
 class QuoteSendRequest(BaseModel):
     """Schema for sending a quote via email."""
-    
+
     toEmail: str = Field(..., description="Customer email address")
-    message: Optional[str] = Field(None, description="Optional custom message to include")
+    message: Optional[str] = Field(
+        None, description="Optional custom message to include"
+    )
 
 
 class QuoteSendResponse(BaseModel):
     """Response schema for quote send operation."""
-    
+
     sent: bool = Field(..., description="Whether the email was sent successfully")
     public_url: str = Field(..., description="Public URL for the quote")
     message: str = Field(..., description="Status message")
@@ -472,7 +476,7 @@ class QuoteSendResponse(BaseModel):
 
 class PublicQuoteItem(BaseModel):
     """Public view of quote item for customers."""
-    
+
     kind: str = Field(..., description="Item type: labor, material, or custom")
     description: Optional[str] = Field(None, description="Item description")
     qty: Decimal = Field(..., description="Quantity")
@@ -483,7 +487,7 @@ class PublicQuoteItem(BaseModel):
 
 class PublicQuote(BaseModel):
     """Public view of quote for customers (no sensitive internal data)."""
-    
+
     company_name: Optional[str] = Field(None, description="Company name")
     project_name: Optional[str] = Field(None, description="Project name")
     customer_name: str = Field(..., description="Customer name (may be masked)")
