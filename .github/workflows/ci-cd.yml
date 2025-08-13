@@ -383,4 +383,6 @@ jobs:
         echo "✅ All checks passed successfully!"
         
     - name: Notify on failure
-      if: failure() 
+      if: failure()
+      run: |
+        echo "❌ Some checks failed!" 
