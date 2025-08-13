@@ -558,17 +558,25 @@ def get_generation_rules_by_company(
     ).all()
 
 
+def get_generation_rule_by_id(
+    db: Session, rule_id: UUID
+) -> Optional[models.GenerationRule]:
+    """Get a generation rule by ID."""
+    return db.query(models.GenerationRule).filter(
+        models.GenerationRule.id == rule_id
+    ).first()
+
+
 def update_generation_rule(
-    db: Session, rule_id: UUID, company_id: UUID, rules: Dict
+    db: Session, rule_id: UUID, rule_update: schemas.GenerationRuleUpdate
 ) -> Optional[models.GenerationRule]:
     """Update a generation rule."""
     rule = db.query(models.GenerationRule).filter(
-        models.GenerationRule.id == rule_id,
-        models.GenerationRule.company_id == company_id
+        models.GenerationRule.id == rule_id
     ).first()
     
     if rule:
-        rule.rules = rules
+        rule.rules = rule_update.rules
         db.commit()
         db.refresh(rule)
     
@@ -710,3 +718,24 @@ def delete_tuning_stat(
         return True
     
     return False
+
+
+# Labor Rate and Material CRUD operations for rule testing
+def get_labor_rate_by_code(
+    db: Session, company_id: UUID, code: str
+) -> Optional[models.LaborRate]:
+    """Get a labor rate by code for a company."""
+    return db.query(models.LaborRate).filter(
+        models.LaborRate.company_id == company_id,
+        models.LaborRate.code == code
+    ).first()
+
+
+def get_material_by_code(
+    db: Session, company_id: UUID, code: str
+) -> Optional[models.Material]:
+    """Get a material by code for a company."""
+    return db.query(models.Material).filter(
+        models.Material.company_id == company_id,
+        models.Material.code == code
+    ).first()

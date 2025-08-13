@@ -1,264 +1,475 @@
-# 🚀 Dev cURL Examples
+# Development cURL Commands
 
-Exempel-curl-kommandon för att testa hela flödet end-to-end.
+Detta dokument innehåller cURL-kommandon för att testa alla viktiga endpoints i Smart Offertgenerator systemet.
 
-## ⚠️ Kända problem
+## 🔐 **Autentisering**
 
-**Endpoint 4 (GET /quotes/{id}/adjustments) fungerar inte korrekt:**
-- Returnerar alltid tom array `[]`
-- Adjustments sparas inte i backend
-- Detta är ett känt problem som behöver fixas
-
-**Endpoints 1-3 fungerar korrekt** och kan användas för testning.
-
-## 🔑 Autentisering
-
-Först behöver du en JWT-token. Sätt denna som miljövariabel:
+Först måste du logga in och få en JWT token:
 
 ```bash
-export JWT_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInRlbmFudF9pZCI6IjY4ODgzZjUyLTMzY2EtNDBjOS04YWQzLWE0OTUyZTBmYmJmMiIsImV4cCI6MTc1NTA3MTE5OX0.b4vyDymoriaR8uPv1HCYbDHum9oxdwXLw-YBpLgPeFc"
-```
-
-**Alternativt, hämta en ny token:**
-```bash
+# Logga in och få token
 curl -X POST "http://localhost:8000/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "username=admin&password=admin123"
+
+# Spara token i variabel för enklare användning
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."  # Ersätt med din faktiska token
 ```
 
-## 📋 1. Skapa projektkrav (Requirements)
+## 📋 **1. Skapa Project Requirements**
 
-### POST /project-requirements
+Skapa projektkrav som systemet ska använda för auto-generering:
 
 ```bash
+# Skapa project requirements för badrum
 curl -X POST "http://localhost:8000/project-requirements" \
-  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
+    "project_name": "Badrum 6m²",
+    "customer_name": "Testkund AB",
     "room_type": "bathroom",
-    "area_m2": 6,
     "finish_level": "standard",
-    "has_plumbing_work": true,
-    "has_electrical_work": false,
-    "material_prefs": ["kakel", "dusch"],
-    "site_constraints": ["begränsat utrymme"],
-    "notes": "Renovering av badrum med kakel, dusch och handfat"
+    "area_m2": 15.5,
+    "data": {
+      "areaM2": 15.5,
+      "hasPlumbingWork": 1,
+      "hasElectricalWork": 0,
+      "roomType": "bathroom",
+      "finishLevel": "standard"
+    }
   }'
+
+# Spara requirements ID för senare användning
+REQ_ID="123e4567-e89b-12d3-a456-426614174000"  # Ersätt med faktiskt ID
 ```
 
-**Exempel-svar:**
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "company_id": "123e4567-e89b-12d3-a456-426614174000",
-  "quote_id": null,
-  "data": {
-    "room_type": "bathroom",
-    "area_m2": 6.0,
-    "finish_level": "standard",
-    "has_plumbing_work": true,
-    "has_electrical_work": false,
-    "material_prefs": ["kakel", "dusch"],
-    "site_constraints": ["begränsat utrymme"],
-    "notes": "Renovering av badrum med kakel, dusch och handfat"
-  },
-  "created_at": "2024-01-15T10:30:00Z"
-}
-```
+## 🎯 **2. Auto-generera Offerter**
 
-## 🤖 2. Auto-generera offert från krav
-
-### POST /quotes/autogenerate
+Använd project requirements för att auto-generera offertrader:
 
 ```bash
+# Hämta price profile ID först
+curl -X GET "http://localhost:8000/price-profiles" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Spara profile ID
+PROFILE_ID="456e7890-e89b-12d3-a456-426614174000"  # Ersätt med faktiskt ID
+
+# Auto-generera offertrader
 curl -X POST "http://localhost:8000/quotes/autogenerate" \
-  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "requirements_id": "61ea8ed7-78cc-427f-ad5e-9c62cd4c85a1",
-    "profile_id": "b0019524-77b6-48e0-9a41-1a48cd422af7"
+    "requirementsId": "'$REQ_ID'",
+    "profileId": "'$PROFILE_ID'"
   }'
 ```
 
-**Exempel-svar:**
+**Förväntat svar:**
 ```json
 {
   "items": [
     {
       "kind": "labor",
-      "ref": "EL",
-      "description": "Labor: EL (rate not found)",
-      "qty": 0.0,
+      "ref": "SNICK",
+      "description": "Snickeri",
+      "qty": 39.0,
       "unit": "hour",
-      "unit_price": 0.0,
-      "line_total": 0.0,
-      "confidence_per_item": 0.3
+      "unit_price": 650.0,
+      "line_total": 25350.0
     },
     {
-      "kind": "labor",
-      "ref": "VVS",
-      "description": "Labor: VVS (rate not found)",
-      "qty": 6.0,
-      "unit": "hour",
-      "unit_price": 0.0,
-      "line_total": 0.0,
-      "confidence_per_item": 0.3
+      "kind": "material",
+      "ref": "KAKEL20",
+      "description": "Kakel 20x20 cm",
+      "qty": 18.6,
+      "unit": "m2",
+      "unit_price": 216.0,
+      "line_total": 4017.6
     }
   ],
-  "subtotal": 0.0,
-  "vat": 0.0,
-  "total": 0.0,
-  "confidence_per_item": [0.3, 0.3]
+  "subtotal": 29367.6,
+  "vat": 7341.9,
+  "total": 36709.5,
+  "tuning_applied": [],
+  "confidence_per_item": {
+    "SNICK": "low",
+    "KAKEL20": "low"
+  }
 }
 ```
 
-**Notera:** Priser är 0 eftersom labor rates och materials inte är konfigurerade än. Detta är normalt för en ny installation.
+## ✏️ **3. Ändra Qty och Spara Quote med sourceItems**
 
-## ✏️ 3. Skapa offert med justerade rader
-
-### POST /quotes
+Skapa en offert med de auto-genererade items som sourceItems:
 
 ```bash
+# Skapa offert med sourceItems för tuning
 curl -X POST "http://localhost:8000/quotes" \
-  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "customer_name": "Testkund AB",
-    "project_name": "Badrum 6 m²",
-    "profile_id": "b0019524-77b6-48e0-9a41-1a48cd422af7",
+    "project_name": "Badrum 6m²",
+    "profile_id": "'$PROFILE_ID'",
     "currency": "SEK",
-    "vat_rate": 25,
+    "vat_rate": 25.0,
     "items": [
       {
         "kind": "labor",
+        "ref": "SNICK",
         "description": "Snickeri",
+        "qty": 45.0,
         "unit": "hour",
-        "qty": 8,
-        "unit_price": 650
+        "unit_price": 650.0
       },
       {
         "kind": "material",
-        "description": "Kakel 20x20",
+        "ref": "KAKEL20",
+        "description": "Kakel 20x20 cm",
+        "qty": 20.0,
         "unit": "m2",
-        "qty": 20,
-        "unit_price": 216
+        "unit_price": 216.0
       }
     ],
     "source_items": [
       {
-        "originalQty": 8,
-        "newQty": 10,
-        "description": "Snickeri",
         "kind": "labor",
-        "adjustment": 2,
-        "adjustmentPercent": 25
+        "ref": "SNICK",
+        "description": "Snickeri",
+        "qty": 39.0,
+        "unit": "hour",
+        "unit_price": 650.0
+      },
+      {
+        "kind": "material",
+        "ref": "KAKEL20",
+        "description": "Kakel 20x20 cm",
+        "qty": 18.6,
+        "unit": "m2",
+        "unit_price": 216.0
       }
     ],
-    "aiSections": {
-      "summary": "Badrumsrenovering",
-      "assumptions": "Standard utförande",
-      "exclusions": "Möbler",
-      "timeline": "4 veckor"
-    }
+    "room_type": "bathroom",
+    "finish_level": "standard"
   }'
 ```
 
-**Exempel-svar:**
+**Förväntat svar:**
 ```json
 {
-  "id": "6c0d058b-f64f-40fe-aeed-02199cb6351f",
-  "subtotal": 9520.0,
-  "vat": 2380.0,
-  "total": 11900.0
+  "id": "789e0123-e89b-12d3-a456-426614174000",
+  "customer_name": "Testkund AB",
+  "project_name": "Badrum 6m²",
+  "status": "draft",
+  "public_token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+  "subtotal": 31800.0,
+  "vat": 7950.0,
+  "total": 39750.0,
+  "created_at": "2024-01-15T10:30:00Z"
 }
 ```
 
-## 📊 4. Hämta ändringslogg för offert
+**Viktigt:** Systemet kommer automatiskt att:
+1. Jämföra `qty` mellan `items` och `source_items`
+2. Logga ändringar i `quote_adjustment_log` om skillnaden är ≥1%
+3. Uppdatera `tuning_stat` med nya faktorer
 
-### GET /quotes/{id}/adjustments
+## 📊 **4. Hämta Tuning Statistics**
 
-```bash
-curl -X GET "http://localhost:8000/quotes/6c0d058b-f64f-40fe-aeed-02199cb6351f/adjustments" \
-  -H "Authorization: Bearer $JWT_TOKEN"
-```
-
-**Exempel-svar:**
-```json
-[]
-```
-
-**Notera:** Just nu returneras en tom array eftersom adjustments inte sparas korrekt i backend. Detta är ett känt problem som behöver fixas.
-
-## 🔍 Extra endpoints för testning
-
-### Hämta alla offerter för företag
+Kontrollera hur systemet har lärt sig från dina justeringar:
 
 ```bash
-curl -X GET "http://localhost:8000/quotes" \
-  -H "Authorization: Bearer $JWT_TOKEN"
+# Hämta alla tuning stats för företaget
+curl -X GET "http://localhost:8000/auto-tuning/insights" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-### Hämta specifik offert
-
-```bash
-curl -X GET "http://localhost:8000/quotes/def67890-e89b-12d3-a456-426614174000" \
-  -H "Authorization: Bearer $JWT_TOKEN"
-```
-
-### Hämta prisprofiler
-
-```bash
-curl -X GET "http://localhost:8000/price-profiles" \
-  -H "Authorization: Bearer $JWT_TOKEN"
-```
-
-## 🚨 Felhantering
-
-### 401 Unauthorized (felaktig JWT)
+**Förväntat svar:**
 ```json
 {
-  "detail": "Could not validate credentials"
-}
-```
-
-### 404 Not Found (felaktigt ID)
-```json
-{
-  "detail": "Quote not found"
-}
-```
-
-### 422 Validation Error (felaktig data)
-```json
-{
-  "detail": [
+  "insights": [
     {
-      "loc": ["body", "customer_name"],
-      "msg": "field required",
-      "type": "value_error.missing"
+      "key": "bathroom|standard",
+      "item_ref": "SNICK",
+      "median_factor": 1.154,
+      "n": 1,
+      "confidence_score": 0.3,
+      "interpretation": "Systemet underskattade med 15%",
+      "sample_count": 1,
+      "last_adjustment": "2024-01-15T10:30:00Z"
+    },
+    {
+      "key": "bathroom|standard",
+      "item_ref": "KAKEL20",
+      "median_factor": 1.075,
+      "n": 1,
+      "confidence_score": 0.3,
+      "interpretation": "Systemet underskattade med 8%",
+      "sample_count": 1,
+      "last_adjustment": "2024-01-15T10:30:00Z"
     }
+  ],
+  "total_patterns": 2,
+  "average_confidence": 0.3,
+  "most_adjusted_item": "SNICK",
+  "improvement_suggestions": [
+    "Flera mönster har låg konfidens (2 st). Överväg att samla in mer data för dessa kombinationer."
   ]
 }
 ```
 
-## 💡 Tips för testning
+## 🔄 **5. Testa Auto-tuning med Uppdaterade Faktorer**
 
-1. **Spara requirements_id** från steg 1 för att använda i steg 2
-2. **Spara quote_id** från steg 2 för att använda i steg 4
-3. **Använd `jq`** för att formatera JSON-svar:
-   ```bash
-   curl ... | jq '.'
-   ```
-4. **Sätt breakpoints** i frontend för att se exakt vad som skickas
-5. **Kontrollera Network-tab** i DevTools för att se alla requests
-
-## 🔧 Miljövariabler för enkel testning
+Skapa en ny offert med samma rumstyp och utförandenivå för att se auto-tuning i aktion:
 
 ```bash
-# Sätt i din .bashrc eller .zshrc
-export API_BASE="http://localhost:8000"
-export JWT_TOKEN="din-jwt-token-här"
+# Skapa nya project requirements (samma rumstyp/nivå)
+curl -X POST "http://localhost:8000/project-requirements" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_name": "Badrum 8m²",
+    "customer_name": "Testkund CD",
+    "room_type": "bathroom",
+    "finish_level": "standard",
+    "area_m2": 20.0,
+    "data": {
+      "areaM2": 20.0,
+      "hasPlumbingWork": 1,
+      "hasElectricalWork": 0,
+      "roomType": "bathroom",
+      "finishLevel": "standard"
+    }
+  }'
 
-# Använd sedan så här:
-curl -X GET "$API_BASE/quotes" -H "Authorization: Bearer $JWT_TOKEN"
-``` 
+# Spara nytt requirements ID
+NEW_REQ_ID="987e6543-e89b-12d3-a456-426614174000"  # Ersätt med faktiskt ID
+
+# Auto-generera igen (nu med tuning)
+curl -X POST "http://localhost:8000/quotes/autogenerate" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requirementsId": "'$NEW_REQ_ID'",
+    "profileId": "'$PROFILE_ID'"
+  }'
+```
+
+**Förväntat svar (med tuning applicerat):**
+```json
+{
+  "items": [
+    {
+      "kind": "labor",
+      "ref": "SNICK",
+      "description": "Snickeri",
+      "qty": 54.16,
+      "unit": "hour",
+      "unit_price": 650.0,
+      "line_total": 35204.0
+    }
+  ],
+  "subtotal": 35204.0,
+  "vat": 8801.0,
+  "total": 44005.0,
+  "tuning_applied": [
+    {
+      "ref": "SNICK",
+      "factor": 1.154
+    }
+  ],
+  "confidence_per_item": {
+    "SNICK": "low"
+  }
+}
+```
+
+**Notera:** 
+- Original qty: `8+2*20 = 48`
+- Med tuning: `48 * 1.154 = 55.392` (clamped till 54.16)
+- Tuning factor 1.154 kommer från din tidigare justering
+
+## 🧪 **6. Testa Admin Rules**
+
+Testa generation rules via admin endpoints:
+
+```bash
+# Hämta alla generation rules
+curl -X GET "http://localhost:8000/admin/rules" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Testa en regel utan att spara
+curl -X POST "http://localhost:8000/admin/rules/test" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "bathroom|standard",
+    "requirementsData": {
+      "areaM2": 15.5,
+      "hasPlumbingWork": 1,
+      "hasElectricalWork": 0
+    }
+  }'
+```
+
+## 📈 **7. Verifiera Tuning Logs**
+
+Kontrollera att alla justeringar har loggats korrekt:
+
+```bash
+# Hämta adjustment logs för en specifik offert
+curl -X GET "http://localhost:8000/quotes/789e0123-e89b-12d3-a456-426614174000/adjustments" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Hämta alla tuning stats för företaget
+curl -X GET "http://localhost:8000/auto-tuning/insights" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## 🔍 **8. Debugging och Troubleshooting**
+
+### Kontrollera att tuning faktorer är korrekta:
+
+```bash
+# Verifiera att median faktorer är rimliga
+curl -X GET "http://localhost:8000/auto-tuning/insights" \
+  -H "Authorization: Bearer $TOKEN" | jq '.insights[] | {item_ref, median_factor, n}'
+```
+
+### Kontrollera adjustment logs:
+
+```bash
+# Se alla justeringar för ett specifikt item
+curl -X GET "http://localhost:8000/quotes/789e0123-e89b-12d3-a456-426614174000/adjustments" \
+  -H "Authorization: Bearer $TOKEN" | jq '.[] | select(.item_ref == "SNICK")'
+```
+
+## 📝 **9. Komplett Test Workflow**
+
+Här är en komplett sekvens för att testa hela systemet:
+
+```bash
+#!/bin/bash
+
+# 1. Logga in
+TOKEN=$(curl -s -X POST "http://localhost:8000/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin&password=admin123" | jq -r '.access_token')
+
+echo "Token: $TOKEN"
+
+# 2. Skapa project requirements
+REQ_RESPONSE=$(curl -s -X POST "http://localhost:8000/project-requirements" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_name": "Test Badrum",
+    "customer_name": "Testkund",
+    "room_type": "bathroom",
+    "finish_level": "standard",
+    "area_m2": 15.5,
+    "data": {
+      "areaM2": 15.5,
+      "hasPlumbingWork": 1,
+      "hasElectricalWork": 0
+    }
+  }')
+
+REQ_ID=$(echo $REQ_RESPONSE | jq -r '.id')
+echo "Requirements ID: $REQ_ID"
+
+# 3. Hämta price profile
+PROFILE_RESPONSE=$(curl -s -X GET "http://localhost:8000/price-profiles" \
+  -H "Authorization: Bearer $TOKEN")
+
+PROFILE_ID=$(echo $PROFILE_RESPONSE | jq -r '.[0].id')
+echo "Profile ID: $PROFILE_ID"
+
+# 4. Auto-generera offert
+AUTO_RESPONSE=$(curl -s -X POST "http://localhost:8000/quotes/autogenerate" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requirementsId": "'$REQ_ID'",
+    "profileId": "'$PROFILE_ID'"
+  }')
+
+echo "Auto-generated items:"
+echo $AUTO_RESPONSE | jq '.items[] | {ref, qty, unit_price, line_total}'
+
+# 5. Skapa offert med sourceItems
+QUOTE_RESPONSE=$(curl -s -X POST "http://localhost:8000/quotes" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_name": "Testkund",
+    "project_name": "Test Badrum",
+    "profile_id": "'$PROFILE_ID'",
+    "items": [
+      {
+        "kind": "labor",
+        "ref": "SNICK",
+        "description": "Snickeri",
+        "qty": 45.0,
+        "unit": "hour",
+        "unit_price": 650.0
+      }
+    ],
+    "source_items": [
+      {
+        "kind": "labor",
+        "ref": "SNICK",
+        "description": "Snickeri",
+        "qty": 39.0,
+        "unit": "hour",
+        "unit_price": 650.0
+      }
+    ],
+    "room_type": "bathroom",
+    "finish_level": "standard"
+  }')
+
+QUOTE_ID=$(echo $QUOTE_RESPONSE | jq -r '.id')
+echo "Quote ID: $QUOTE_ID"
+
+# 6. Vänta lite och hämta tuning insights
+sleep 2
+
+TUNING_RESPONSE=$(curl -s -X GET "http://localhost:8000/auto-tuning/insights" \
+  -H "Authorization: Bearer $TOKEN")
+
+echo "Tuning insights:"
+echo $TUNING_RESPONSE | jq '.insights[] | {item_ref, median_factor, n, interpretation}'
+
+echo "Test workflow completed!"
+```
+
+## ⚠️ **Viktiga Noter**
+
+1. **Token hantering:** JWT tokens har en begränsad livslängd. Om du får 401-fel, logga in igen.
+
+2. **UUID format:** Alla ID:n måste vara giltiga UUID:er. Använd de som returneras från API:et.
+
+3. **Tuning tröskel:** Endast justeringar ≥1% loggas för tuning.
+
+4. **Confidence levels:** 
+   - `low`: n < 3
+   - `med`: 3 ≤ n < 10  
+   - `high`: n ≥ 10
+
+5. **Factor clamping:** Tuning faktorer begränsas till [0.8, 1.2] för stabilitet.
+
+6. **Multi-tenancy:** Alla endpoints är company-scoped baserat på användarens JWT token.
+
+## 🚀 **Nästa Steg**
+
+Efter att du har testat detta workflow kan du:
+
+1. **Skapa fler generation rules** för olika rumstyper och utförandenivåer
+2. **Testa med olika project requirements** för att se hur systemet lär sig
+3. **Analysera tuning patterns** för att förbättra grundreglerna
+4. **Implementera frontend integration** med admin rules sidan
+
+Lycka till med testningen! 🎯 

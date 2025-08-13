@@ -20,7 +20,7 @@ from .auto_tuning import create_auto_tuning_engine
 from .db import Base, engine, get_db
 from .models import Company, LaborRate, Material, PriceProfile, Tenant, User, Quote, QuotePackage, QuoteAdjustmentLog
 from .pricing import calc_totals
-from .rule_evaluator import RuleEvaluator
+from .rules_eval import create_rules_evaluator
 
 # Sentry configuration - temporarily disabled for debugging
 # import sentry_sdk
@@ -261,7 +261,11 @@ async def create_quote(
 
     # Log any quantity changes if source_items were provided
     if q.source_items:
-        log_quantity_changes(db, uuid.UUID(quote_id), q.source_items, items)
+        # Get room_type and finish_level for tuning
+        room_type = q.room_type
+        finish_level = q.finish_level
+        
+        log_quantity_changes(db, uuid.UUID(quote_id), q.source_items, items, company_id, room_type, finish_level)
 
     return {
         "id": quote_id,
@@ -632,8 +636,23 @@ async def auto_generate_quote(
 ):
     """
     Auto-generate quote items based on project requirements and generation rules.
-
+    
     Multi-tenant security: Only uses requirements and rules belonging to the user's company.
+    
+    cURL Example:
+    curl -X POST "http://localhost:8000/quotes/autogenerate" \
+         -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+         -H "Content-Type: application/json" \
+         -d '{
+           "requirementsId": "uuid-of-project-requirements",
+           "profileId": "uuid-of-price-profile"
+         }'
+    
+    Response includes:
+    - items: Generated quote items with quantities and prices
+    - subtotal, vat, total: Calculated totals
+    - tuning_applied: List of applied tuning factors per item
+    - confidence_per_item: Confidence level per item (low/med/high)
     """
     companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
     if not companies:
@@ -678,8 +697,8 @@ async def auto_generate_quote(
             detail=f"Saknar generation_rule för '{rule_key}'. Skapa en regel för denna kombination av rumstyp och utförandenivå. Exempel: POST /generation-rules med key='{rule_key}' och lämpliga regler för labor och materials.",
         )
 
-    # Initialize rule evaluator with data dict
-    evaluator = RuleEvaluator(schemas.ProjectRequirementsIn(**requirements.data))
+    # Initialize rule evaluator with project requirements data
+    evaluator = create_rules_evaluator(requirements.data)
 
     # Generate items based on rules
     generated_items = []
@@ -689,7 +708,11 @@ async def auto_generate_quote(
         # Process labor rules
         if "labor" in generation_rule.rules:
             for ref, expression in generation_rule.rules["labor"].items():
-                qty = evaluator.evaluate_expression(expression)
+                try:
+                    qty = evaluator.evaluate(expression)
+                except ValueError as e:
+                    print(f"Error evaluating expression '{expression}' for labor item {ref}: {e}")
+                    qty = Decimal('0')
 
                 # Get labor rate for this reference
                 labor_rate = (
@@ -735,7 +758,11 @@ async def auto_generate_quote(
         # Process material rules
         if "materials" in generation_rule.rules:
             for ref, expression in generation_rule.rules["materials"].items():
-                qty = evaluator.evaluate_expression(expression)
+                try:
+                    qty = evaluator.evaluate(expression)
+                except ValueError as e:
+                    print(f"Error evaluating expression '{expression}' for material item {ref}: {e}")
+                    qty = Decimal('0')
 
                 # Get material for this reference
                 material = (
@@ -779,58 +806,66 @@ async def auto_generate_quote(
                 confidence_levels.append(confidence)
 
         # Apply auto-tuning if available
-        tuning_applied = False
-        tuning_insights = None
+        tuning_applied = []
+        confidence_per_item = {}
 
         try:
-            # Create auto-tuning engine
-            tuning_engine = create_auto_tuning_engine(db, company_id)
-
-            # Convert items to dict format for tuning
-            items_dict = [
-                {
-                    "kind": item.kind,
-                    "ref": item.ref,
-                    "description": item.description,
-                    "qty": item.qty,
-                    "unit": item.unit,
-                    "unit_price": item.unit_price,
-                    "line_total": item.line_total,
-                }
-                for item in generated_items
-            ]
-
-            # Apply auto-tuning
-            tuned_items_dict = tuning_engine.apply_tuning_to_generation(
-                schemas.ProjectRequirementsIn(**requirements.data),
-                items_dict
-            )
-
-            # Update generated items with tuning results
-            for i, tuned_item in enumerate(tuned_items_dict):
-                if "tuning_confidence" in tuned_item:
-                    generated_items[i].qty = tuned_item["qty"]
-                    generated_items[i].line_total = tuned_item["line_total"]
-                    tuning_applied = True
-
-            # Get tuning insights if tuning was applied
-            if tuning_applied:
-                tuning_insights = tuning_engine.get_tuning_insights()
+            # Get tuning stats for each item
+            for item in generated_items:
+                tuning_stat = crud.get_tuning_stat_by_key_and_item(
+                    db, company_id, rule_key, item.ref
+                )
+                
+                if tuning_stat and tuning_stat.n >= 3:  # Only apply if we have enough data
+                    # Apply tuning factor with ±20% clamp
+                    factor = float(tuning_stat.median_factor)
+                    clamped_factor = max(0.8, min(1.2, factor))
+                    
+                    # Apply factor to quantity and recalculate line total
+                    original_qty = item.qty
+                    adjusted_qty = float(original_qty) * clamped_factor
+                    adjusted_line_total = adjusted_qty * item.unit_price
+                    
+                    # Update item
+                    item.qty = adjusted_qty
+                    item.line_total = adjusted_line_total
+                    
+                    # Record tuning application
+                    tuning_applied.append({
+                        "ref": item.ref,
+                        "factor": clamped_factor,
+                        "original_qty": float(original_qty),
+                        "adjusted_qty": adjusted_qty
+                    })
+                    
+                    # Set confidence level based on sample count
+                    if tuning_stat.n >= 10:
+                        confidence_per_item[item.ref] = "high"
+                    elif tuning_stat.n >= 5:
+                        confidence_per_item[item.ref] = "med"
+                    else:
+                        confidence_per_item[item.ref] = "low"
+                else:
+                    confidence_per_item[item.ref] = "low"  # No tuning data
 
         except Exception as e:
             # Log error but continue without tuning
             print(f"Auto-tuning error (non-critical): {e}")
             pass
 
-        # Calculate overall confidence score
-        overall_confidence = sum(confidence_levels) / len(confidence_levels) if confidence_levels else 0.0
+        # Calculate totals
+        subtotal = sum(item.line_total for item in generated_items)
+        vat_rate = float(profile.vat_rate) / 100.0
+        vat = subtotal * vat_rate
+        total = subtotal + vat
 
         return schemas.AutoGenerateResponse(
             items=generated_items,
-            total_items=len(generated_items),
-            confidence_score=overall_confidence,
+            subtotal=float(subtotal),
+            vat=float(vat),
+            total=float(total),
             tuning_applied=tuning_applied,
-            tuning_insights=tuning_insights,
+            confidence_per_item=confidence_per_item,
         )
 
     except Exception as e:
@@ -1679,6 +1714,9 @@ def log_quantity_changes(
     quote_id: UUID,
     source_items: List[Dict[str, Any]],
     final_items: List[Dict[str, Any]],
+    company_id: UUID,
+    room_type: str = None,
+    finish_level: str = None,
 ) -> None:
     """
     Compare source items with final items and log any quantity changes.
@@ -1688,9 +1726,22 @@ def log_quantity_changes(
         quote_id: ID of the quote being created
         source_items: Original auto-generated items
         final_items: Final items after user adjustments
+        company_id: Company ID for multi-tenancy
+        room_type: Room type from project requirements (for tuning)
+        finish_level: Finish level from project requirements (for tuning)
     """
     if not source_items:
         return  # No source items to compare against
+
+    # Create tuning helper if we have room_type and finish_level
+    tuning_helper = None
+    if room_type and finish_level:
+        try:
+            from .tuning import create_tuning_helper
+            tuning_helper = create_tuning_helper(db, company_id)
+        except ImportError:
+            print("Warning: Tuning helper not available, falling back to basic logging")
+            tuning_helper = None
 
     # Create a lookup dictionary for source items by ref
     source_lookup = {}
@@ -1709,22 +1760,58 @@ def log_quantity_changes(
         if not source_item:
             continue
 
-        # Compare quantities
-        old_qty = source_item.get("qty", 0)
-        new_qty = final_item.get("qty", 0)
+        # Compare quantities with 1% threshold
+        old_qty = Decimal(str(source_item.get("qty", 0)))
+        new_qty = Decimal(str(final_item.get("qty", 0)))
+        
+        # Calculate percentage difference
+        if old_qty > 0:
+            percentage_diff = abs(new_qty - old_qty) / old_qty
+            threshold = Decimal('0.01')  # 1%
+            
+            if percentage_diff >= threshold:
+                if tuning_helper and room_type and finish_level:
+                    # Use advanced tuning helper
+                    try:
+                        tuning_helper.log_adjustment_and_update_tuning(
+                            quote_id=quote_id,
+                            item_ref=ref,
+                            old_qty=old_qty,
+                            new_qty=new_qty,
+                            room_type=room_type,
+                            finish_level=finish_level,
+                            adjustment_reason=f"User adjusted quantity from {old_qty} to {new_qty} (diff: {percentage_diff:.1%})"
+                        )
+                    except Exception as e:
+                        print(f"Error in tuning helper: {e}")
+                        # Fall back to basic logging
+                        _log_basic_adjustment(db, quote_id, ref, old_qty, new_qty)
+                else:
+                    # Use basic logging
+                    _log_basic_adjustment(db, quote_id, ref, old_qty, new_qty)
 
-        if old_qty != new_qty:
-            # Log the change
-            crud.create_quote_adjustment_log(
-                db,
-                schemas.QuoteAdjustmentLogCreate(
-                    quote_id=quote_id,
-                    item_ref=ref,
-                    old_qty=old_qty,
-                    new_qty=new_qty,
-                    reason=f"User adjusted quantity from {old_qty} to {new_qty}",
-                ),
-            )
+
+def _log_basic_adjustment(
+    db: Session,
+    quote_id: UUID,
+    item_ref: str,
+    old_qty: Decimal,
+    new_qty: Decimal,
+) -> None:
+    """Basic adjustment logging without tuning integration."""
+    try:
+        crud.create_quote_adjustment_log(
+            db,
+            schemas.QuoteAdjustmentLogCreate(
+                quote_id=quote_id,
+                item_ref=item_ref,
+                old_qty=old_qty,
+                new_qty=new_qty,
+                reason=f"User adjusted quantity from {old_qty} to {new_qty}",
+            ),
+        )
+    except Exception as e:
+        print(f"Error logging basic adjustment: {e}")
 
 
 @app.post("/quotes/{quote_id}/adjustments", response_model=schemas.QuoteAdjustmentOut)
@@ -1890,3 +1977,221 @@ async def get_auto_tuning_insights(
         most_adjusted_item=most_adjusted_item,
         improvement_suggestions=improvement_suggestions,
     )
+
+
+# ============================================================================
+# ADMIN ENDPOINTS
+# ============================================================================
+
+@app.get("/admin/rules", response_model=List[schemas.GenerationRuleOut])
+async def get_generation_rules(
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get all generation rules for the current user's company.
+    
+    Multi-tenant security: Only returns rules for the user's company.
+    
+    Example:
+    ```bash
+    curl -X GET "http://localhost:8000/admin/rules" \
+         -H "Authorization: Bearer <token>"
+    ```
+    """
+    # Get companies for the user
+    companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
+    if not companies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No company found for user"
+        )
+    
+    company_id = companies[0].id
+    
+    # Get generation rules for the company
+    rules = crud.get_generation_rules_by_company(db, company_id)
+    return rules
+
+
+@app.put("/admin/rules/{rule_id}", response_model=schemas.GenerationRuleOut)
+async def update_generation_rule(
+    rule_id: str,
+    rule_update: schemas.GenerationRuleUpdate,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update a generation rule.
+    
+    Multi-tenant security: Only allows updates to rules owned by the user's company.
+    
+    Example:
+    ```bash
+    curl -X PUT "http://localhost:8000/admin/rules/123e4567-e89b-12d3-a456-426614174000" \
+         -H "Authorization: Bearer <token>" \
+         -H "Content-Type: application/json" \
+         -d '{
+           "rules": {
+             "labor": {"SNICK": "8+2*areaM2"},
+             "materials": {"KAKEL20": "areaM2*1.2"}
+           }
+         }'
+    ```
+    """
+    # Get companies for the user
+    companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
+    if not companies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No company found for user"
+        )
+    
+    company_id = companies[0].id
+    
+    # Get the rule and verify ownership
+    rule = crud.get_generation_rule_by_id(db, rule_id)
+    if not rule or rule.company_id != company_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
+        )
+    
+    # Update the rule
+    updated_rule = crud.update_generation_rule(db, rule_id, rule_update)
+    return updated_rule
+
+
+@app.post("/admin/rules/test", response_model=schemas.RuleTestResponse)
+async def test_generation_rule(
+    test_request: schemas.RuleTestRequest,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Test a generation rule against sample requirements data.
+    
+    This endpoint allows testing rules without saving any data.
+    Useful for validating rule syntax and seeing expected output.
+    
+    Multi-tenant security: Only allows testing rules owned by the user's company.
+    
+    Example:
+    ```bash
+    curl -X POST "http://localhost:8000/admin/rules/test" \
+         -H "Authorization: Bearer <token>" \
+         -H "Content-Type: application/json" \
+         -d '{
+           "key": "bathroom|standard",
+           "requirementsData": {
+             "areaM2": 15.5,
+             "hasPlumbingWork": 1,
+             "hasElectricalWork": 0
+           }
+         }'
+    ```
+    
+    Response includes:
+    - Generated items with quantities and prices
+    - Calculated totals (subtotal, VAT, total)
+    - No data is saved to the database
+    """
+    # Get companies for the user
+    companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
+    if not companies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No company found for user"
+        )
+    
+    company_id = companies[0].id
+    
+    # Get the generation rule
+    rule = crud.get_generation_rule_by_key(db, company_id, test_request.key)
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"No generation rule found for key: {test_request.key}"
+        )
+    
+    try:
+        # Create rules evaluator with test data
+        evaluator = create_rules_evaluator(test_request.requirementsData)
+        
+        # Generate items based on the rule
+        generated_items = []
+        
+        # Process labor items
+        if "labor" in rule.rules:
+            for ref, expression in rule.rules["labor"].items():
+                try:
+                    qty = evaluator.evaluate(expression)
+                    # Get labor rate for this item
+                    labor_rate = crud.get_labor_rate_by_code(db, company_id, ref)
+                    if labor_rate:
+                        unit_price = float(labor_rate.unit_price)
+                        line_total = float(qty) * unit_price
+                        
+                        generated_items.append({
+                            "kind": "labor",
+                            "ref": ref,
+                            "description": labor_rate.description or f"Arbete {ref}",
+                            "qty": float(qty),
+                            "unit": labor_rate.unit or "hour",
+                            "unit_price": unit_price,
+                            "line_total": line_total
+                        })
+                except ValueError as e:
+                    # Skip items with invalid expressions
+                    print(f"Warning: Invalid expression '{expression}' for {ref}: {e}")
+                    continue
+        
+        # Process material items
+        if "materials" in rule.rules:
+            for ref, expression in rule.rules["materials"].items():
+                try:
+                    qty = evaluator.evaluate(expression)
+                    # Get material for this item
+                    material = crud.get_material_by_code(db, company_id, ref)
+                    if material:
+                        # Calculate unit price with markup
+                        unit_cost = float(material.unit_cost)
+                        markup_pct = float(material.markup_pct or 0)
+                        unit_price = unit_cost * (1 + markup_pct / 100)
+                        unit_price = round(unit_price, 2)
+                        line_total = float(qty) * unit_price
+                        
+                        generated_items.append({
+                            "kind": "material",
+                            "ref": ref,
+                            "description": material.description or f"Material {ref}",
+                            "qty": float(qty),
+                            "unit": material.unit or "st",
+                            "unit_price": unit_price,
+                            "line_total": line_total
+                        })
+                except ValueError as e:
+                    # Skip items with invalid expressions
+                    print(f"Warning: Invalid expression '{expression}' for {ref}: {e}")
+                    continue
+        
+        if not generated_items:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid items could be generated from the rule"
+            )
+        
+        # Calculate totals
+        subtotal = sum(item["line_total"] for item in generated_items)
+        vat_rate = 25.0  # Default VAT rate, could be made configurable
+        vat = subtotal * vat_rate / 100.0
+        total = subtotal + vat
+        
+        return schemas.RuleTestResponse(
+            items=generated_items,
+            subtotal=round(subtotal, 2),
+            vat=round(vat, 2),
+            total=round(total, 2)
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error testing rule: {str(e)}"
+        )

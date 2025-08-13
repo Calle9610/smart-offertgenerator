@@ -14,6 +14,7 @@ interface QuoteItem {
   unit?: string
   unit_price: number
   line_total: number
+  confidence_per_item?: string
 }
 
 interface QuotePackage {
@@ -65,11 +66,17 @@ export default function QuoteForm() {
   // Auto-tuning state
   const [showAutoTuningInfo, setShowAutoTuningInfo] = useState(false)
   const [autoTuningInsights, setAutoTuningInsights] = useState<any>(null)
+  
+  // Auto-generation state
+  const [sourceItems, setSourceItems] = useState<QuoteItem[]>([])
+  const [roomType, setRoomType] = useState<string>('')
+  const [finishLevel, setFinishLevel] = useState<string>('')
+  const [generatingItems, setGeneratingItems] = useState(false)
 
   // Get the actual quote ID - either from URL params (for editing) or from created quote
   const quoteId = urlQuoteId !== 'new' ? urlQuoteId : createdQuote?.id
 
-  // Fetch profile ID on component mount
+  // Fetch profile ID and check URL params on component mount
   useEffect(() => {
     const fetchProfileId = async () => {
       try {
@@ -89,6 +96,14 @@ export default function QuoteForm() {
         console.error('Error fetching profile ID:', error)
       }
     }
+
+    // Check URL params for room_type and finish_level
+    const urlParams = new URLSearchParams(window.location.search)
+    const urlRoomType = urlParams.get('room_type')
+    const urlFinishLevel = urlParams.get('finish_level')
+    
+    if (urlRoomType) setRoomType(urlRoomType)
+    if (urlFinishLevel) setFinishLevel(urlFinishLevel)
 
     fetchProfileId()
   }, [])
@@ -191,6 +206,108 @@ export default function QuoteForm() {
     }
   }
 
+  const generateItems = async () => {
+    if (!profileId) {
+      setToastMessage('Du måste välja en prisprofil först')
+      setToastType('error')
+      setShowToast(true)
+      return
+    }
+
+    if (!roomType || !finishLevel) {
+      setToastMessage('Du måste ange rumstyp och utförandenivå först')
+      setToastType('error')
+      setShowToast(true)
+      return
+    }
+
+    try {
+      setGeneratingItems(true)
+      
+      // Get requirements ID from URL params
+      const urlParams = new URLSearchParams(window.location.search)
+      const reqId = urlParams.get('reqId')
+      
+      if (!reqId) {
+        setToastMessage('Inget requirements ID hittat i URL')
+        setToastType('error')
+        setShowToast(true)
+        return
+      }
+
+      const response = await fetch('/api/quotes/autogenerate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          requirementsId: reqId,
+          profileId: profileId
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        // Convert response items to QuoteItem format
+        const generatedItems: QuoteItem[] = data.items.map((item: any) => ({
+          kind: item.kind,
+          ref: item.ref,
+          description: item.description,
+          qty: item.qty,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          line_total: item.line_total,
+          confidence_per_item: data.confidence_per_item[item.ref] || 'low'
+        }))
+
+        // Store source items for comparison
+        setSourceItems([...generatedItems])
+        
+        // Update current items
+        setItems(generatedItems)
+        
+        // Update totals
+        setTotals({
+          subtotal: data.subtotal,
+          vat: data.vat,
+          total: data.total
+        })
+
+        setToastMessage('Offertrader genererade framgångsrikt!')
+        setToastType('success')
+        setShowToast(true)
+      } else {
+        const errorData = await response.json()
+        setToastMessage(`Fel vid generering: ${errorData.detail}`)
+        setToastType('error')
+        setShowToast(true)
+      }
+    } catch (error) {
+      console.error('Error generating items:', error)
+      setToastMessage('Ett fel uppstod vid generering av offertrader')
+      setToastType('error')
+      setShowToast(true)
+    } finally {
+      setGeneratingItems(false)
+    }
+  }
+
+  const adjustQuantity = (idx: number, adjustment: number) => {
+    setItems(prev => prev.map((item, i) => {
+      if (i === idx) {
+        const newQty = Math.max(0, item.qty * (1 + adjustment))
+        return {
+          ...item,
+          qty: newQty,
+          line_total: newQty * item.unit_price
+        }
+      }
+      return item
+    }))
+  }
+
   const setDefaultPackage = async (packageId: string) => {
     const currentQuoteId = quoteId || createdQuote?.id
     if (!currentQuoteId) return
@@ -255,7 +372,10 @@ export default function QuoteForm() {
         profile_id: profileId,
         currency: 'SEK',
         vat_rate: vatRate,
-        items: items
+        items: items,
+        source_items: sourceItems.length > 0 ? sourceItems : undefined,
+        room_type: roomType || undefined,
+        finish_level: finishLevel || undefined
       }
 
       const response = await fetch('/api/quotes/calc', {
@@ -617,20 +737,62 @@ export default function QuoteForm() {
             placeholder="Moms %"
           />
         </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <select
+            className="border rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={roomType}
+            onChange={(e) => setRoomType(e.target.value)}
+          >
+            <option value="">Välj rumstyp</option>
+            <option value="bathroom">Badrum</option>
+            <option value="kitchen">Kök</option>
+            <option value="flooring">Golv</option>
+          </select>
+          
+          <select
+            className="border rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={finishLevel}
+            onChange={(e) => setFinishLevel(e.target.value)}
+          >
+            <option value="">Välj utförandenivå</option>
+            <option value="basic">Basic</option>
+            <option value="standard">Standard</option>
+            <option value="premium">Premium</option>
+          </select>
+        </div>
+
+        {/* Generate button */}
+        {!createdQuote && (
+          <div className="mb-6">
+            <button
+              onClick={generateItems}
+              disabled={generatingItems || !profileId || !roomType || !finishLevel}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {generatingItems ? 'Genererar...' : 'Generera offertrader'}
+            </button>
+            <p className="text-sm text-gray-600 mt-2">
+              Generera offertrader baserat på projektkrav och prisprofil
+            </p>
+          </div>
+        )}
 
         <div className="space-y-3 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-3 text-sm font-medium text-gray-700 pb-2 border-b">
+          <div className="grid grid-cols-1 md:grid-cols-9 gap-3 text-sm font-medium text-gray-700 pb-2 border-b">
             <div>Typ</div>
             <div>Beskrivning</div>
             <div>Enhet</div>
             <div>Antal</div>
             <div>Á-pris (SEK)</div>
             <div>Konfidens</div>
+            <div>Snabbjustering</div>
+            <div>Åtgärder</div>
             <div></div>
           </div>
           
           {items.map((it, idx) => (
-            <div key={idx} className="grid grid-cols-1 md:grid-cols-7 gap-3 items-center">
+            <div key={idx} className="grid grid-cols-1 md:grid-cols-9 gap-3 items-center">
               <select
                 className="border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={it.kind}
@@ -667,33 +829,47 @@ export default function QuoteForm() {
                 placeholder="Á-pris exkl. moms"
               />
               <div className="flex items-center justify-center">
-                {autoTuningInsights && it.ref && (
-                  <div className="text-xs">
-                    {(() => {
-                      const pattern = autoTuningInsights.insights?.find((insight: any) => 
-                        insight.item_ref === it.ref
-                      )
-                      if (pattern) {
-                        const confidence = pattern.confidence_score
-                        const color = confidence >= 0.8 ? 'text-green-600' : 
-                                    confidence >= 0.6 ? 'text-yellow-600' : 'text-red-600'
-                        return (
-                          <span className={`${color} font-medium`}>
-                            {(confidence * 100).toFixed(0)}%
-                          </span>
-                        )
-                      }
-                      return <span className="text-gray-400">-</span>
-                    })()}
-                  </div>
+                {it.confidence_per_item ? (
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    it.confidence_per_item === 'high' ? 'bg-green-100 text-green-800' :
+                    it.confidence_per_item === 'med' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {it.confidence_per_item === 'high' ? 'Hög' :
+                     it.confidence_per_item === 'med' ? 'Medel' : 'Låg'}
+                  </span>
+                ) : (
+                  <span className="text-gray-400">-</span>
                 )}
               </div>
-              <button
-                className="border rounded-md p-2 text-red-600 hover:bg-red-50 transition-colors"
-                onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
-              >
-                Ta bort
-              </button>
+              
+              <div className="flex items-center justify-center space-x-1">
+                <button
+                  onClick={() => adjustQuantity(idx, -0.1)}
+                  className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                  title="-10%"
+                >
+                  -10%
+                </button>
+                <button
+                  onClick={() => adjustQuantity(idx, 0.1)}
+                  className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                  title="+10%"
+                >
+                  +10%
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-center space-x-1">
+                <button
+                  onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
+                  className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                  title="Ta bort"
+                >
+                  Ta bort
+                </button>
+              </div>
+
             </div>
           ))}
           
