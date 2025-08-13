@@ -64,6 +64,73 @@ class QuoteOutTotals(BaseModel):
     total: float
 
 
+# Quote Package schemas
+class QuotePackageItem(BaseModel):
+    """Schema for items within a quote package."""
+    
+    kind: str = Field(..., description="Item type: labor, material, or custom")
+    ref: Optional[str] = Field(None, description="Item reference code")
+    description: Optional[str] = Field(None, description="Item description")
+    qty: Decimal = Field(..., description="Quantity")
+    unit: str = Field(..., description="Unit of measurement")
+    unit_price: Decimal = Field(..., description="Unit price")
+    line_total: Decimal = Field(..., description="Line total")
+
+
+class QuotePackageCreate(BaseModel):
+    """Schema for creating a quote package."""
+    
+    name: str = Field(..., description="Package name (e.g., Basic, Standard, Premium)")
+    items: List[QuotePackageItem] = Field(..., description="List of package items")
+    subtotal: Optional[Decimal] = Field(None, description="Package subtotal")
+    vat: Optional[Decimal] = Field(None, description="Package VAT amount")
+    total: Optional[Decimal] = Field(None, description="Package total amount")
+    is_default: bool = Field(False, description="Whether this is the default package")
+
+
+class QuotePackageOut(BaseModel):
+    """Schema for quote package output."""
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: UUID
+    quote_id: UUID
+    name: str
+    items: List[QuotePackageItem]
+    subtotal: Optional[Decimal]
+    vat: Optional[Decimal]
+    total: Optional[Decimal]
+    is_default: bool
+    created_at: str
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def convert_datetime(cls, v):
+        """Convert datetime to ISO format string."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
+
+class QuotePackageGenerateRequest(BaseModel):
+    """Schema for generating quote packages."""
+    
+    package_names: List[str] = Field(
+        default=["Basic", "Standard", "Premium"],
+        description="Names of packages to generate"
+    )
+    discount_percentages: Optional[List[Decimal]] = Field(
+        None,
+        description="Discount percentages for each package (e.g., [0, 5, 10] for 0%, 5%, 10% off)"
+    )
+
+
+class QuotePackageAcceptRequest(BaseModel):
+    """Schema for accepting a quote package."""
+    
+    packageId: UUID = Field(..., description="ID of the package to accept")
+
+
 # Quote Adjustment Log schemas
 class QuoteAdjustmentLogOut(BaseModel):
     """
@@ -99,53 +166,39 @@ class ProjectRequirementsIn(BaseModel):
     """
     Input schema for project requirements during quote intake.
 
-    Validates project specifications including room type, area, finish level,
-    and specific work requirements. All fields are validated for safety.
+    Captures essential project details needed for quote generation.
+    All fields are validated and sanitized for security.
     """
 
-    room_type: RoomType = Field(..., description="Type of room for the project")
-    area_m2: float = Field(
-        ..., gt=0, description="Area in square meters, must be positive"
+    room_type: RoomType = Field(..., description="Type of room being renovated")
+    area: Decimal = Field(..., description="Room area in square meters")
+    finish_level: FinishLevel = Field(..., description="Desired finish quality level")
+    work_requirements: List[str] = Field(
+        default_factory=list,
+        description="List of specific work requirements",
     )
-    finish_level: FinishLevel = Field(
-        ..., description="Desired finish level for the project"
+    special_requests: Optional[str] = Field(
+        None, description="Any special requests or notes"
     )
-    has_plumbing_work: bool = Field(
-        ..., description="Whether plumbing work is required"
-    )
-    has_electrical_work: bool = Field(
-        ..., description="Whether electrical work is required"
-    )
-    material_prefs: List[str] = Field(
-        default_factory=list, description="Material preferences"
-    )
-    site_constraints: List[str] = Field(
-        default_factory=list, description="Site-specific constraints"
-    )
-    notes: Optional[str] = Field(None, description="Additional notes or requirements")
 
-    @field_validator("area_m2")
+    @field_validator("area")
     @classmethod
     def validate_area(cls, v):
-        """Ensure area is reasonable for construction projects."""
-        if v > 10000:  # 10,000 m² limit
-            raise ValueError("Area cannot exceed 10,000 m²")
+        """Validate that area is positive and reasonable."""
+        if v <= 0:
+            raise ValueError("Area must be positive")
+        if v > 1000:  # 1000 m² max for safety
+            raise ValueError("Area seems unreasonably large")
         return v
 
-    @field_validator("material_prefs", "site_constraints")
+    @field_validator("work_requirements")
     @classmethod
-    def validate_list_lengths(cls, v):
-        """Ensure lists don't exceed reasonable limits."""
-        if len(v) > 50:  # 50 items limit
-            raise ValueError("List cannot exceed 50 items")
-        return v
-
-    @field_validator("notes")
-    @classmethod
-    def validate_notes_length(cls, v):
-        """Ensure notes don't exceed reasonable length."""
-        if v and len(v) > 2000:  # 2000 characters limit
-            raise ValueError("Notes cannot exceed 2000 characters")
+    def validate_work_requirements(cls, v):
+        """Validate work requirements list."""
+        if not v:
+            raise ValueError("At least one work requirement must be specified")
+        if len(v) > 20:  # Prevent abuse
+            raise ValueError("Too many work requirements")
         return v
 
 
@@ -153,16 +206,16 @@ class ProjectRequirementsOut(BaseModel):
     """
     Output schema for project requirements.
 
-    Includes the ID and creation timestamp along with the requirements data.
+    Includes generated ID and creation timestamp.
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     company_id: UUID
-    quote_id: Optional[UUID]
+    quote_id: Optional[UUID] = None
     data: ProjectRequirementsIn
-    created_at: datetime
+    created_at: str
 
     @field_validator("created_at", mode="before")
     @classmethod
@@ -175,82 +228,35 @@ class ProjectRequirementsOut(BaseModel):
 
 class ProjectRequirementsCreate(BaseModel):
     """
-    Schema for creating new project requirements.
+    Internal schema for creating project requirements.
 
-    Used internally for database operations.
+    Includes company_id for multi-tenant security.
     """
 
     company_id: UUID
-    quote_id: Optional[UUID] = None
     data: ProjectRequirementsIn
 
 
-# Generation Rules schemas
 class GenerationRuleIn(BaseModel):
     """
     Input schema for generation rules.
 
-    Rules define how to automatically generate quote items based on project requirements.
+    Rules define how to calculate quantities and prices
+    based on project requirements.
     """
 
     key: str = Field(..., description="Rule key in format 'roomType|finishLevel'")
-    rules: Dict[str, Dict[str, str]] = Field(
-        ..., description="Generation rules for labor and materials"
-    )
+    rules: Dict[str, Any] = Field(..., description="Rule configuration as JSON")
 
     @field_validator("key")
     @classmethod
     def validate_key_format(cls, v):
-        """Validate key format is 'roomType|finishLevel'."""
+        """Validate key format."""
         if "|" not in v:
             raise ValueError("Key must be in format 'roomType|finishLevel'")
-
-        parts = v.split("|")
-        if len(parts) != 2:
-            raise ValueError("Key must contain exactly one '|' separator")
-
-        room_type, finish_level = parts
-
-        # Validate room type
-        try:
-            RoomType(room_type)
-        except ValueError:
-            raise ValueError(f"Invalid room type: {room_type}")
-
-        # Validate finish level
-        try:
-            FinishLevel(finish_level)
-        except ValueError:
-            raise ValueError(f"Invalid finish level: {finish_level}")
-
-        return v
-
-    @field_validator("rules")
-    @classmethod
-    def validate_rules_structure(cls, v):
-        """Validate rules structure contains labor and/or materials."""
-        if not isinstance(v, dict):
-            raise ValueError("Rules must be a dictionary")
-
-        if not v:
-            raise ValueError("Rules cannot be empty")
-
-        allowed_sections = {"labor", "materials"}
-        if not any(section in allowed_sections for section in v.keys()):
-            raise ValueError("Rules must contain at least one of: labor, materials")
-
-        for section, section_rules in v.items():
-            if section not in allowed_sections:
-                raise ValueError(
-                    f"Unknown section: {section}. Allowed: {allowed_sections}"
-                )
-
-            if not isinstance(section_rules, dict):
-                raise ValueError(f"Section {section} rules must be a dictionary")
-
-            if not section_rules:
-                raise ValueError(f"Section {section} rules cannot be empty")
-
+        room_type, finish_level = v.split("|", 1)
+        if not room_type or not finish_level:
+            raise ValueError("Both roomType and finishLevel must be specified")
         return v
 
 
@@ -258,90 +264,62 @@ class GenerationRuleOut(BaseModel):
     """
     Output schema for generation rules.
 
-    Includes the ID and creation timestamp along with the rule data.
+    Includes generated ID and timestamps.
     """
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     company_id: UUID
     key: str
-    rules: Dict[str, Dict[str, str]]
+    rules: Dict[str, Any]
     created_at: str
     updated_at: str
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def convert_datetime(cls, v):
+        """Convert datetime to ISO format string."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
 
 class GenerationRuleCreate(BaseModel):
     """
-    Schema for creating new generation rules.
+    Internal schema for creating generation rules.
 
-    Used internally for database operations.
+    Includes company_id for multi-tenant security.
     """
 
     company_id: UUID
-    key: str
-    rules: Dict[str, Dict[str, str]]
-
-
-# Auto-generation schemas
-class AutoGenerateRequest(BaseModel):
-    """
-    Request schema for auto-generating quote items.
-    """
-
-    requirements_id: str = Field(..., description="ID of project requirements to use")
-    profile_id: str = Field(..., description="ID of price profile to use")
-
-
-class AutoGeneratedItem(BaseModel):
-    """
-    Schema for auto-generated quote items.
-    """
-
-    kind: str = Field(..., description="Item type: labor, material, or custom")
-    ref: Optional[str] = Field(None, description="Reference code (e.g., SNICK, VVS)")
-    description: Optional[str] = Field(None, description="Item description")
-    qty: float = Field(..., description="Calculated quantity")
-    unit: str = Field(..., description="Unit of measurement")
-    unit_price: float = Field(..., description="Unit price from price list")
-    line_total: float = Field(..., description="Line total (qty * unit_price)")
-    confidence_per_item: float = Field(
-        ..., description="Confidence level for this item (0.0-1.0)"
-    )
-
-
-class AutoGenerateResponse(BaseModel):
-    """
-    Response schema for auto-generated quotes.
-    """
-
-    items: List[AutoGeneratedItem] = Field(..., description="Generated quote items")
-    subtotal: float = Field(..., description="Subtotal of all items")
-    vat: float = Field(..., description="VAT amount")
-    total: float = Field(..., description="Total amount including VAT")
-    confidence_per_item: List[float] = Field(
-        ..., description="Confidence levels for each item"
-    )
+    data: GenerationRuleIn
 
 
 class UserCreate(BaseModel):
-    email: str
-    username: str
-    password: str
-    full_name: Optional[str] = None
-    tenant_id: UUID
-    is_active: bool = True
+    """Schema for creating new users."""
+
+    email: str = Field(..., description="User email address")
+    username: str = Field(..., description="Username for login")
+    password: str = Field(..., description="Plain text password (will be hashed)")
+    full_name: Optional[str] = Field(None, description="User's full name")
+    tenant_id: UUID = Field(..., description="Tenant ID for multi-tenancy")
+    is_active: bool = Field(True, description="Whether user account is active")
 
 
-class User(BaseModel):
+class UserOut(BaseModel):
+    """Schema for user output (no sensitive data)."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     email: str
     username: str
-    full_name: Optional[str] = None
-    tenant_id: UUID
+    full_name: Optional[str]
     is_active: bool
     is_superuser: bool
-    created_at: datetime
+    tenant_id: UUID
+    created_at: str
 
     @field_validator("created_at", mode="before")
     @classmethod
@@ -352,19 +330,30 @@ class User(BaseModel):
         return v
 
 
+class UserLogin(BaseModel):
+    """Schema for user login."""
+
+    username: str = Field(..., description="Username for login")
+    password: str = Field(..., description="Plain text password")
+
+
 class TenantCreate(BaseModel):
-    name: str
-    domain: Optional[str] = None
+    """Schema for creating new tenants."""
+
+    name: str = Field(..., description="Tenant name")
+    domain: Optional[str] = Field(None, description="Tenant domain")
 
 
-class Tenant(BaseModel):
+class TenantOut(BaseModel):
+    """Schema for tenant output."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     name: str
-    domain: Optional[str] = None
+    domain: Optional[str]
     is_active: bool
-    created_at: datetime
+    created_at: str
 
     @field_validator("created_at", mode="before")
     @classmethod
@@ -376,8 +365,10 @@ class Tenant(BaseModel):
 
 
 class CompanyCreate(BaseModel):
-    name: str
-    tenant_id: UUID
+    """Schema for creating new companies."""
+
+    name: str = Field(..., description="Company name")
+    tenant_id: UUID = Field(..., description="Tenant ID for multi-tenancy")
 
 
 class Company(BaseModel):
@@ -386,6 +377,15 @@ class Company(BaseModel):
     id: UUID
     name: str
     tenant_id: UUID
+
+
+class PriceProfileCreate(BaseModel):
+    """Schema for creating new price profiles."""
+
+    company_id: UUID = Field(..., description="Company ID for the price profile")
+    name: str = Field(..., description="Profile name")
+    currency: str = Field(..., description="Currency code")
+    vat_rate: Decimal = Field(..., description="VAT rate percentage")
 
 
 class QuoteOut(BaseModel):
@@ -402,8 +402,17 @@ class QuoteOut(BaseModel):
     total: Decimal
     status: str
     public_token: str
+    accepted_package_id: Optional[UUID] = None
     created_at: str
     updated_at: str
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def convert_datetime(cls, v):
+        """Convert datetime to ISO format string."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
 
 class QuoteEventCreate(BaseModel):
@@ -452,6 +461,7 @@ class QuoteWithEvents(BaseModel):
     total: Decimal
     status: str
     public_token: str
+    accepted_package_id: Optional[UUID] = None
     created_at: str
     updated_at: str
     events: List[QuoteEventOut] = Field(default_factory=list)
@@ -485,6 +495,18 @@ class PublicQuoteItem(BaseModel):
     line_total: Decimal = Field(..., description="Line total")
 
 
+class PublicQuotePackage(BaseModel):
+    """Public view of quote package for customers."""
+    
+    id: UUID = Field(..., description="Package ID")
+    name: str = Field(..., description="Package name")
+    items: List[PublicQuoteItem] = Field(..., description="Package items")
+    subtotal: Decimal = Field(..., description="Package subtotal")
+    vat: Decimal = Field(..., description="Package VAT amount")
+    total: Decimal = Field(..., description="Package total amount")
+    is_default: bool = Field(..., description="Whether this is the default package")
+
+
 class PublicQuote(BaseModel):
     """Public view of quote for customers (no sensitive internal data)."""
 
@@ -496,8 +518,41 @@ class PublicQuote(BaseModel):
     subtotal: Decimal = Field(..., description="Subtotal")
     vat: Decimal = Field(..., description="VAT amount")
     total: Decimal = Field(..., description="Total amount")
+    packages: List[PublicQuotePackage] = Field(default_factory=list, description="Available packages")
+    accepted_package_id: Optional[UUID] = Field(None, description="ID of accepted package if any")
     summary: Optional[str] = Field(None, description="Project summary")
     assumptions: Optional[str] = Field(None, description="Project assumptions")
     exclusions: Optional[str] = Field(None, description="What's not included")
     timeline: Optional[str] = Field(None, description="Project timeline")
     created_at: str = Field(..., description="Quote creation date")
+
+
+# Auto-generation schemas
+class AutoGeneratedItem(BaseModel):
+    """Schema for auto-generated quote items."""
+    
+    kind: str = Field(..., description="Item type: labor, material, or custom")
+    ref: Optional[str] = Field(None, description="Reference code (e.g., SNICK, VVS)")
+    description: Optional[str] = Field(None, description="Item description")
+    qty: Decimal = Field(..., description="Calculated quantity")
+    unit: str = Field(..., description="Unit of measurement")
+    unit_price: Decimal = Field(..., description="Unit price from price list")
+    line_total: Decimal = Field(..., description="Line total (qty * unit_price)")
+    confidence_per_item: Decimal = Field(..., description="Confidence level for this item (0.0-1.0)")
+
+
+class AutoGenerateRequest(BaseModel):
+    """Request schema for auto-generating quote items."""
+    
+    requirements_id: str = Field(..., description="ID of project requirements to use")
+    profile_id: str = Field(..., description="ID of price profile to use")
+
+
+class AutoGenerateResponse(BaseModel):
+    """Response schema for auto-generated quotes."""
+    
+    items: List[AutoGeneratedItem] = Field(..., description="Generated quote items")
+    subtotal: Decimal = Field(..., description="Subtotal of all items")
+    vat: Decimal = Field(..., description="VAT amount")
+    total: Decimal = Field(..., description="Total amount including VAT")
+    confidence_per_item: List[Decimal] = Field(..., description="Confidence levels for each item")

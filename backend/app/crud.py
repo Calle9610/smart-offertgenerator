@@ -12,6 +12,7 @@ from .schemas import (
     ProjectRequirementsCreate,
     QuoteAdjustmentLogCreate,
     QuoteEventCreate,
+    QuotePackageCreate,
     TenantCreate,
     UserCreate,
 )
@@ -76,6 +77,16 @@ def get_companies_by_tenant(db: Session, tenant_id: UUID) -> List[models.Company
     return db.query(models.Company).filter(models.Company.tenant_id == tenant_id).all()
 
 
+# Price Profile operations
+def create_price_profile(db: Session, profile_data: dict) -> models.PriceProfile:
+    """Create a new price profile."""
+    db_profile = models.PriceProfile(**profile_data)
+    db.add(db_profile)
+    db.commit()
+    db.refresh(db_profile)
+    return db_profile
+
+
 # Quote operations
 def create_quote(db: Session, tenant_id: UUID, user_id: UUID, data: dict) -> str:
     """Create a quote with tenant and user context."""
@@ -98,6 +109,7 @@ def create_quote(db: Session, tenant_id: UUID, user_id: UUID, data: dict) -> str
     db.add(q)
     db.flush()
 
+    # Create quote items
     for item in data["items"]:
         qi = models.QuoteItem(
             quote_id=q.id,
@@ -116,15 +128,22 @@ def create_quote(db: Session, tenant_id: UUID, user_id: UUID, data: dict) -> str
     return str(q.id)
 
 
-def get_quotes_by_tenant(db: Session, tenant_id: UUID) -> List[models.Quote]:
-    """Get all quotes for a specific tenant."""
-    return db.query(models.Quote).filter(models.Quote.tenant_id == tenant_id).all()
-
-
 def get_quote_by_id_and_tenant(
     db: Session, quote_id: UUID, tenant_id: UUID
 ) -> Optional[models.Quote]:
-    """Get a specific quote by ID, ensuring it belongs to the tenant."""
+    """
+    Get quote by ID with tenant validation.
+
+    Multi-tenant security: Only returns quotes belonging to the tenant.
+
+    Args:
+        db: Database session
+        quote_id: Quote ID to retrieve
+        tenant_id: Tenant ID for validation
+
+    Returns:
+        Quote instance if found and authorized, None otherwise
+    """
     return (
         db.query(models.Quote)
         .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
@@ -132,47 +151,341 @@ def get_quote_by_id_and_tenant(
     )
 
 
-def get_quote_by_public_token(db: Session, public_token: str) -> Optional[models.Quote]:
-    """Get a quote by its public token for customer access."""
+def get_quotes_by_tenant(db: Session, tenant_id: UUID) -> List[models.Quote]:
+    """
+    Get all quotes for a specific tenant.
+
+    Multi-tenant security: Only returns quotes belonging to the tenant.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant ID to get quotes for
+
+    Returns:
+        List of Quote instances for the tenant
+    """
     return (
-        db.query(models.Quote).filter(models.Quote.public_token == public_token).first()
+        db.query(models.Quote)
+        .filter(models.Quote.tenant_id == tenant_id)
+        .order_by(models.Quote.created_at.desc())
+        .all()
     )
+
+
+def get_quote_by_public_token(db: Session, public_token: str) -> Optional[models.Quote]:
+    """
+    Get quote by public token (no tenant validation needed for public access).
+
+    Args:
+        db: Database session
+        public_token: Public token to look up
+
+    Returns:
+        Quote instance if found, None otherwise
+    """
+    return (
+        db.query(models.Quote)
+        .filter(models.Quote.public_token == public_token)
+        .first()
+    )
+
+
+def get_quote_with_events(db: Session, quote_id: UUID, tenant_id: UUID) -> Optional[models.Quote]:
+    """
+    Get quote with all its events, tenant-scoped.
+
+    Multi-tenant security: Only returns quotes belonging to the tenant.
+
+    Args:
+        db: Database session
+        quote_id: Quote ID to retrieve
+        tenant_id: Tenant ID for validation
+
+    Returns:
+        Quote instance with events if found and authorized, None otherwise
+    """
+    return (
+        db.query(models.Quote)
+        .options(joinedload(models.Quote.events))
+        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
+        .first()
+    )
+
+
+# Quote Package operations
+def create_quote_package(
+    db: Session, quote_id: UUID, package_data: QuotePackageCreate
+) -> models.QuotePackage:
+    """
+    Create a new quote package.
+
+    Args:
+        db: Database session
+        quote_id: Quote ID to attach package to
+        package_data: Package data from request
+
+    Returns:
+        Created QuotePackage instance
+    """
+    # Convert items to raw dictionaries for JSON storage
+    items_dict = []
+    for item in package_data.items:
+        items_dict.append({
+            "kind": item.kind,
+            "ref": item.ref,
+            "description": item.description,
+            "qty": float(item.qty) if hasattr(item.qty, '__float__') else item.qty,
+            "unit": item.unit,
+            "unit_price": float(item.unit_price) if hasattr(item.unit_price, '__float__') else item.unit_price,
+            "line_total": float(item.line_total) if hasattr(item.line_total, '__float__') else item.line_total,
+        })
+
+    db_package = models.QuotePackage(
+        quote_id=quote_id,
+        name=package_data.name,
+        items=items_dict,  # Store as raw dictionary
+        subtotal=package_data.subtotal,
+        vat=package_data.vat,
+        total=package_data.total,
+        is_default=package_data.is_default,
+    )
+    db.add(db_package)
+    db.commit()
+    db.refresh(db_package)
+    return db_package
+
+
+def get_quote_packages(db: Session, quote_id: UUID, tenant_id: UUID) -> List[models.QuotePackage]:
+    """
+    Get all packages for a specific quote with tenant validation.
+
+    Multi-tenant security: Only returns packages for quotes belonging to the tenant.
+
+    Args:
+        db: Database session
+        quote_id: Quote ID to get packages for
+        tenant_id: Tenant ID for validation
+
+    Returns:
+        List of QuotePackage instances for the quote
+    """
+    # First verify the quote belongs to the tenant
+    quote = (
+        db.query(models.Quote)
+        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
+        .first()
+    )
+
+    if not quote:
+        return []
+
+    # Get packages for this quote
+    packages = (
+        db.query(models.QuotePackage)
+        .filter(models.QuotePackage.quote_id == quote_id)
+        .order_by(models.QuotePackage.created_at.asc())
+        .all()
+    )
+
+    return packages
+
+
+def update_quote_accepted_package(
+    db: Session, quote_id: UUID, package_id: UUID, tenant_id: UUID
+) -> Optional[models.Quote]:
+    """
+    Update quote to mark a package as accepted.
+
+    Multi-tenant security: Only allows updates to quotes belonging to the tenant.
+
+    Args:
+        db: Database session
+        quote_id: Quote ID to update
+        package_id: Package ID to mark as accepted
+        tenant_id: Tenant ID for validation
+
+    Returns:
+        Updated Quote instance if successful, None if not found or not authorized
+    """
+    # Verify the quote belongs to the tenant
+    quote = (
+        db.query(models.Quote)
+        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
+        .first()
+    )
+
+    if not quote:
+        return None
+
+    # Verify the package belongs to this quote
+    package = (
+        db.query(models.QuotePackage)
+        .filter(models.QuotePackage.id == package_id, models.QuotePackage.quote_id == quote_id)
+        .first()
+    )
+
+    if not package:
+        return None
+
+    # Update the quote
+    quote.accepted_package_id = package_id
+    db.commit()
+    db.refresh(quote)
+    return quote
+
+
+def generate_quote_packages(
+    db: Session, quote_id: UUID, tenant_id: UUID, package_names: List[str], discount_percentages: Optional[List[Decimal]] = None
+) -> List[models.QuotePackage]:
+    """
+    Generate multiple quote packages based on the original quote items.
+
+    Creates packages with different pricing levels (e.g., Basic, Standard, Premium).
+    Multi-tenant security: Only allows generation for quotes belonging to the tenant.
+
+    Args:
+        db: Database session
+        quote_id: Quote ID to generate packages for
+        tenant_id: Tenant ID for validation
+        package_names: List of package names to generate
+        discount_percentages: Optional list of discount percentages for each package
+
+    Returns:
+        List of generated QuotePackage instances
+    """
+    # Verify the quote belongs to the tenant
+    quote = (
+        db.query(models.Quote)
+        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
+        .first()
+    )
+
+    if not quote:
+        return []
+
+    # Get quote items
+    quote_items = (
+        db.query(models.QuoteItem)
+        .filter(models.QuoteItem.quote_id == quote_id)
+        .all()
+    )
+
+    if not quote_items:
+        return []
+
+    # Convert items to package format
+    base_items = []
+    for item in quote_items:
+        base_items.append({
+            "kind": item.kind,
+            "ref": item.ref,
+            "description": item.description,
+            "qty": item.qty,
+            "unit": item.unit,
+            "unit_price": item.unit_price,
+            "line_total": item.line_total,
+        })
+
+    # Generate packages
+    packages = []
+    for i, package_name in enumerate(package_names):
+        # Apply discount if specified
+        discount = discount_percentages[i] if discount_percentages and i < len(discount_percentages) else Decimal("0")
+        discount_multiplier = Decimal("1") - (discount / Decimal("100"))
+
+        # Create package items with adjusted pricing
+        package_items = []
+        subtotal = Decimal("0")
+        for item in base_items:
+            adjusted_unit_price = item["unit_price"] * discount_multiplier
+            adjusted_line_total = item["qty"] * adjusted_unit_price
+            package_items.append({
+                "kind": item["kind"],
+                "ref": item["ref"],
+                "description": item["description"],
+                "qty": float(item["qty"]),  # Convert Decimal to float for JSON serialization
+                "unit": item["unit"],
+                "unit_price": float(adjusted_unit_price),  # Convert Decimal to float
+                "line_total": float(adjusted_line_total),  # Convert Decimal to float
+            })
+            subtotal += adjusted_line_total
+
+        # Calculate VAT and total
+        vat = subtotal * (quote.vat / quote.subtotal) if quote.subtotal > 0 else Decimal("0")
+        total = subtotal + vat
+
+        # Create package
+        package_data = QuotePackageCreate(
+            name=package_name,
+            items=package_items,
+            subtotal=float(subtotal),  # Convert to float for JSON serialization
+            vat=float(vat),  # Convert to float for JSON serialization
+            total=float(total),  # Convert to float for JSON serialization
+            is_default=(i == 0),  # First package is default
+        )
+
+        package = create_quote_package(db, quote_id, package_data)
+        packages.append(package)
+
+    return packages
 
 
 # Quote Event operations
-def create_quote_event(db: Session, event: QuoteEventCreate) -> models.QuoteEvent:
-    """Create a new quote event for tracking customer interactions."""
-    db_event = models.QuoteEvent(
-        quote_id=event.quote_id,
-        type=event.type,
-        meta=event.meta,
-    )
+def create_quote_event(
+    db: Session, event_data: QuoteEventCreate
+) -> models.QuoteEvent:
+    """
+    Create new quote event.
+
+    Args:
+        db: Database session
+        event_data: Event data from request
+
+    Returns:
+        Created QuoteEvent instance
+    """
+    db_event = models.QuoteEvent(**event_data.dict())
     db.add(db_event)
     db.commit()
     db.refresh(db_event)
     return db_event
 
 
-def get_quote_events(db: Session, quote_id: UUID) -> List[models.QuoteEvent]:
-    """Get all events for a specific quote."""
-    return (
+def get_quote_events(
+    db: Session, quote_id: UUID, tenant_id: UUID
+) -> List[models.QuoteEvent]:
+    """
+    Get all events for a specific quote with tenant validation.
+
+    Multi-tenant security: Only returns events for quotes belonging to the tenant.
+
+    Args:
+        db: Database session
+        quote_id: Quote ID to get events for
+        tenant_id: Tenant ID for validation
+
+    Returns:
+        List of QuoteEvent for the quote
+    """
+    # First verify the quote belongs to the tenant
+    quote = (
+        db.query(models.Quote)
+        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
+        .first()
+    )
+
+    if not quote:
+        return []
+
+    # Get events for this quote
+    events = (
         db.query(models.QuoteEvent)
         .filter(models.QuoteEvent.quote_id == quote_id)
         .order_by(models.QuoteEvent.created_at.desc())
         .all()
     )
 
-
-def get_quote_with_events(
-    db: Session, quote_id: UUID, tenant_id: UUID
-) -> Optional[models.Quote]:
-    """Get a quote with its events, ensuring it belongs to the tenant."""
-    return (
-        db.query(models.Quote)
-        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
-        .options(joinedload(models.Quote.events))
-        .first()
-    )
+    return events
 
 
 # Project Requirements operations
@@ -180,26 +493,16 @@ def create_project_requirements(
     db: Session, requirements: ProjectRequirementsCreate
 ) -> models.ProjectRequirements:
     """
-    Create new project requirements with multi-tenant security.
+    Create new project requirements.
 
     Args:
         db: Database session
-        requirements: Project requirements data with company_id for tenant scoping
+        requirements: Requirements data from request
 
     Returns:
         Created ProjectRequirements instance
-
-    Raises:
-        ValueError: If company_id is not provided
     """
-    if not requirements.company_id:
-        raise ValueError("company_id is required for multi-tenant security")
-
-    db_requirements = models.ProjectRequirements(
-        company_id=requirements.company_id,
-        quote_id=requirements.quote_id,
-        data=requirements.data.dict(),
-    )
+    db_requirements = models.ProjectRequirements(**requirements.dict())
     db.add(db_requirements)
     db.commit()
     db.refresh(db_requirements)
@@ -212,11 +515,11 @@ def get_project_requirements_by_company(
     """
     Get all project requirements for a specific company.
 
-    Multi-tenant security: Only returns requirements for the specified company_id.
+    Multi-tenant security: Only returns requirements belonging to the company.
 
     Args:
         db: Database session
-        company_id: Company ID for tenant scoping
+        company_id: Company ID to get requirements for
 
     Returns:
         List of ProjectRequirements for the company
@@ -343,63 +646,20 @@ def create_generation_rule(
     db: Session, rule: GenerationRuleCreate
 ) -> models.GenerationRule:
     """
-    Create new generation rule with multi-tenant security.
+    Create new generation rule.
 
     Args:
         db: Database session
-        rule: Generation rule data with company_id for tenant scoping
+        rule: Rule data from request
 
     Returns:
         Created GenerationRule instance
-
-    Raises:
-        ValueError: If company_id is not provided
     """
-    if not rule.company_id:
-        raise ValueError("company_id is required for multi-tenant security")
-
-    db_rule = models.GenerationRule(
-        company_id=rule.company_id, key=rule.key, rules=rule.rules
-    )
+    db_rule = models.GenerationRule(**rule.dict())
     db.add(db_rule)
     db.commit()
     db.refresh(db_rule)
     return db_rule
-
-
-def get_generation_rule_by_key(
-    db: Session, company_id: UUID, key: str
-) -> Optional[models.GenerationRule]:
-    """
-    Get generation rule by key with company validation.
-
-    Multi-tenant security: Only returns rules belonging to the specified company.
-
-    Args:
-        db: Database session
-        company_id: Company ID for tenant scoping
-        key: Rule key in format 'roomType|finishLevel'
-
-    Returns:
-        GenerationRule if found and belongs to company, None otherwise
-    """
-    rule = (
-        db.query(models.GenerationRule)
-        .filter(
-            models.GenerationRule.company_id == company_id,
-            models.GenerationRule.key == key,
-        )
-        .first()
-    )
-
-    if rule:
-        # Convert datetime objects to strings for Pydantic compatibility
-        if hasattr(rule, "created_at") and rule.created_at:
-            rule.created_at = rule.created_at.isoformat()
-        if hasattr(rule, "updated_at") and rule.updated_at:
-            rule.updated_at = rule.updated_at.isoformat()
-
-    return rule
 
 
 def get_generation_rules_by_company(
@@ -408,34 +668,51 @@ def get_generation_rules_by_company(
     """
     Get all generation rules for a specific company.
 
-    Multi-tenant security: Only returns rules for the specified company_id.
+    Multi-tenant security: Only returns rules belonging to the company.
 
     Args:
         db: Database session
-        company_id: Company ID for tenant scoping
+        company_id: Company ID to get rules for
 
     Returns:
         List of GenerationRule for the company
     """
-    rules = (
+    return (
         db.query(models.GenerationRule)
         .filter(models.GenerationRule.company_id == company_id)
-        .order_by(models.GenerationRule.key)
+        .order_by(models.GenerationRule.updated_at.desc())
         .all()
     )
 
-    # Convert datetime objects to strings for Pydantic compatibility
-    for rule in rules:
-        if hasattr(rule, "created_at") and rule.created_at:
-            rule.created_at = rule.created_at.isoformat()
-        if hasattr(rule, "updated_at") and rule.updated_at:
-            rule.updated_at = rule.updated_at.isoformat()
 
-    return rules
+def get_generation_rule_by_key(
+    db: Session, key: str, company_id: UUID
+) -> Optional[models.GenerationRule]:
+    """
+    Get generation rule by key with company validation.
+
+    Multi-tenant security: Only returns rules belonging to the company.
+
+    Args:
+        db: Database session
+        key: Rule key to look up
+        company_id: Company ID for validation
+
+    Returns:
+        GenerationRule instance if found and authorized, None otherwise
+    """
+    return (
+        db.query(models.GenerationRule)
+        .filter(
+            models.GenerationRule.key == key,
+            models.GenerationRule.company_id == company_id,
+        )
+        .first()
+    )
 
 
 def update_generation_rule(
-    db: Session, rule_id: UUID, company_id: UUID, update_data: dict
+    db: Session, rule_id: UUID, company_id: UUID, **kwargs
 ) -> Optional[models.GenerationRule]:
     """
     Update generation rule with company validation.
@@ -446,10 +723,10 @@ def update_generation_rule(
         db: Database session
         rule_id: Generation rule ID to update
         company_id: Company ID for tenant scoping
-        update_data: Dictionary of fields to update
+        **kwargs: Fields to update
 
     Returns:
-        Updated GenerationRule if found and belongs to company, None otherwise
+        Updated GenerationRule instance if successful, None if not found or not authorized
     """
     rule = (
         db.query(models.GenerationRule)
@@ -463,10 +740,9 @@ def update_generation_rule(
     if not rule:
         return None
 
-    # Update only allowed fields
-    allowed_fields = {"key", "rules"}
-    for field, value in update_data.items():
-        if field in allowed_fields:
+    # Update fields
+    for field, value in kwargs.items():
+        if hasattr(rule, field):
             setattr(rule, field, value)
 
     db.commit()

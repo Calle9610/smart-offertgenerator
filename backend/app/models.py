@@ -122,6 +122,7 @@ class Quote(Base):
     total = Column(Numeric(12, 2), server_default=text("0"))
     status = Column(String, nullable=False, server_default=text("'draft'"))
     public_token = Column(String(64), unique=True, nullable=False)
+    accepted_package_id = Column(UUID(as_uuid=True), ForeignKey("quote_package.id"), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
     updated_at = Column(
         TIMESTAMP(timezone=True), server_default=text("now()"), onupdate=text("now()")
@@ -135,6 +136,13 @@ class Quote(Base):
     items = relationship(
         "QuoteItem", back_populates="quote", cascade="all, delete-orphan"
     )
+    packages = relationship(
+        "QuotePackage", 
+        foreign_keys="[QuotePackage.quote_id]",
+        back_populates="quote", 
+        cascade="all, delete-orphan"
+    )
+    accepted_package = relationship("QuotePackage", foreign_keys=[accepted_package_id], post_update=True)
     project_requirements = relationship("ProjectRequirements", back_populates="quote")
     adjustment_logs = relationship(
         "QuoteAdjustmentLog", back_populates="quote", cascade="all, delete-orphan"
@@ -142,6 +150,30 @@ class Quote(Base):
     events = relationship(
         "QuoteEvent", back_populates="quote", cascade="all, delete-orphan"
     )
+
+
+class QuotePackage(Base):
+    """
+    Quote packages for offering different service levels.
+
+    Stores different package options for a quote, allowing customers to choose
+    between basic, standard, and premium service levels. Each package contains
+    a list of items with quantities and prices.
+    """
+
+    __tablename__ = "quote_package"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False)
+    name = Column(Text, nullable=False)  # e.g., "Basic", "Standard", "Premium"
+    items = Column(JSONB, nullable=False)  # List of package items
+    subtotal = Column(Numeric(12, 2), nullable=True)
+    vat = Column(Numeric(12, 2), nullable=True)
+    total = Column(Numeric(12, 2), nullable=True)
+    is_default = Column(Boolean, server_default=text("false"))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
+
+    # Relationships
+    quote = relationship("Quote", foreign_keys=[quote_id], back_populates="packages")
 
 
 class QuoteItem(Base):

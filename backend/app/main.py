@@ -53,6 +53,10 @@ app.add_middleware(
 template_loader = jinja2.FileSystemLoader(searchpath="./templates")
 template_env = jinja2.Environment(loader=template_loader, autoescape=True)
 
+# Simple in-memory cache for rate-limiting opened events
+# In production, use Redis or similar for distributed rate-limiting
+_opened_events_cache = {}  # token -> last_opened_timestamp
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -159,7 +163,7 @@ async def login_for_access_token(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.post("/users", response_model=schemas.User)
+@app.post("/users", response_model=schemas.UserOut)
 async def create_user(
     user: schemas.UserCreate, current_user: User = Depends(auth.get_current_active_user)
 ):
@@ -188,7 +192,7 @@ async def create_user(
         db.close()
 
 
-@app.get("/users/me", response_model=schemas.User)
+@app.get("/users/me", response_model=schemas.UserOut)
 async def read_users_me(current_user: User = Depends(auth.get_current_active_user)):
     """Get current user information."""
     return current_user
@@ -1013,12 +1017,82 @@ async def send_quote(
         raise HTTPException(status_code=500, detail=f"Failed to send quote: {str(e)}")
 
 
-# Simple in-memory cache for rate-limiting opened events
-# In production, use Redis or similar for distributed rate-limiting
-_opened_events_cache = {}  # token -> last_opened_timestamp
+# Quote Package endpoints
+@app.post("/quotes/{quote_id}/packages/generate")
+async def generate_quote_packages(
+    quote_id: str,
+    generate_request: schemas.QuotePackageGenerateRequest,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Generate quote packages based on quote items (JWT, company-scoped)."""
+    try:
+        # Get quote with tenant validation
+        quote = crud.get_quote_by_id_and_tenant(
+            db, uuid.UUID(quote_id), current_user.tenant_id
+        )
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+
+        # Generate packages
+        packages = crud.generate_quote_packages(
+            db=db,
+            quote_id=uuid.UUID(quote_id),
+            tenant_id=current_user.tenant_id,
+            package_names=generate_request.package_names,
+            discount_percentages=generate_request.discount_percentages,
+        )
+
+        if not packages:
+            raise HTTPException(
+                status_code=400, detail="No packages could be generated"
+            )
+
+        print(f"✅ Generated {len(packages)} packages for quote {quote_id}")
+
+        return {
+            "message": f"Successfully generated {len(packages)} packages",
+            "packages": [schemas.QuotePackageOut.from_orm(pkg) for pkg in packages],
+            "quote_id": quote_id,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating quote packages: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate packages: {str(e)}"
+        )
 
 
-# Public quote endpoint (no authentication required)
+@app.get("/quotes/{quote_id}/packages", response_model=List[schemas.QuotePackageOut])
+async def get_quote_packages(
+    quote_id: str,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Get all packages for a specific quote (JWT, company-scoped)."""
+    try:
+        # Get packages with tenant validation
+        packages = crud.get_quote_packages(
+            db, uuid.UUID(quote_id), current_user.tenant_id
+        )
+
+        if not packages:
+            return []
+
+        return [schemas.QuotePackageOut.from_orm(pkg) for pkg in packages]
+
+    except Exception as e:
+        print(f"Error getting quote packages: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve packages: {str(e)}"
+        )
+
+
+# Update public quote endpoint to include packages
 @app.get("/public/quotes/{token}", response_model=schemas.PublicQuote)
 async def get_public_quote(
     token: str,
@@ -1095,6 +1169,41 @@ async def get_public_quote(
                 )
             )
 
+        # Get packages for this quote
+        packages = []
+        try:
+            quote_packages = crud.get_quote_packages(
+                db, quote.id, quote.tenant_id
+            )
+            for pkg in quote_packages:
+                package_items = []
+                for item in pkg.items:
+                    package_items.append(
+                        schemas.PublicQuoteItem(
+                            kind=item["kind"],
+                            description=item.get("description"),
+                            qty=item["qty"],
+                            unit=item["unit"] or "",
+                            unit_price=item["unit_price"],
+                            line_total=item["line_total"],
+                        )
+                    )
+                
+                packages.append(
+                    schemas.PublicQuotePackage(
+                        id=pkg.id,
+                        name=pkg.name,
+                        items=package_items,
+                        subtotal=pkg.subtotal,
+                        vat=pkg.vat,
+                        total=pkg.total,
+                        is_default=pkg.is_default,
+                    )
+                )
+        except Exception as e:
+            print(f"Warning: Could not retrieve packages: {e}")
+            # Don't fail the request if package retrieval fails
+
         # Get additional fields from project requirements if available
         summary = None
         assumptions = None
@@ -1123,6 +1232,8 @@ async def get_public_quote(
             subtotal=quote.subtotal,
             vat=quote.vat,
             total=quote.total,
+            packages=packages,
+            accepted_package_id=quote.accepted_package_id,
             summary=summary,
             assumptions=assumptions,
             exclusions=exclusions,
@@ -1138,13 +1249,14 @@ async def get_public_quote(
         raise HTTPException(status_code=500, detail="Failed to retrieve quote")
 
 
-# Accept quote endpoint (no authentication required)
+# Update accept quote endpoint to handle package acceptance
 @app.post("/public/quotes/{token}/accept")
 async def accept_public_quote(
     token: str,
+    accept_request: schemas.QuotePackageAcceptRequest,
     db: Session = Depends(get_db),
 ):
-    """Accept a public quote by token (no authentication required)."""
+    """Accept a public quote package by token (no authentication required)."""
     try:
         # Get quote by public token
         quote = crud.get_quote_by_public_token(db, token)
@@ -1162,12 +1274,33 @@ async def accept_public_quote(
                 detail=f"Quote cannot be accepted in status '{quote.status}'. Only 'SENT' or 'REVIEWED' quotes can be accepted.",
             )
 
+        # Update quote to mark package as accepted
+        updated_quote = crud.update_quote_accepted_package(
+            db, quote.id, accept_request.packageId, quote.tenant_id
+        )
+        
+        if not updated_quote:
+            raise HTTPException(
+                status_code=400, detail="Invalid package ID or package not found"
+            )
+
         # Update quote status to ACCEPTED
         quote.status = "ACCEPTED"
         db.commit()
         db.refresh(quote)
 
-        # Create accepted event
+        # Get package name for event logging
+        package_name = "Unknown"
+        try:
+            package = db.query(models.QuotePackage).filter(
+                models.QuotePackage.id == accept_request.packageId
+            ).first()
+            if package:
+                package_name = package.name
+        except Exception:
+            pass
+
+        # Create accepted event with package information
         try:
             event = crud.create_quote_event(
                 db,
@@ -1179,6 +1312,8 @@ async def accept_public_quote(
                         "user_agent": "unknown",  # Could extract from request if needed
                         "accepted_at": datetime.now().isoformat(),
                         "previous_status": quote.status,
+                        "package_id": str(accept_request.packageId),
+                        "package_name": package_name,
                     },
                 ),
             )
@@ -1187,12 +1322,14 @@ async def accept_public_quote(
             print(f"Warning: Could not create accepted event: {e}")
             # Don't fail the request if event creation fails
 
-        print(f"🎉 Quote {quote.id} accepted! Status: {quote.status}")
+        print(f"🎉 Quote {quote.id} accepted with package {package_name}! Status: {quote.status}")
 
         return {
-            "message": "Quote accepted successfully",
+            "message": f"Quote accepted successfully with package: {package_name}",
             "status": "ACCEPTED",
             "quote_id": str(quote.id),
+            "package_id": str(accept_request.packageId),
+            "package_name": package_name,
         }
 
     except HTTPException:

@@ -5,27 +5,31 @@ export async function POST(
   { params }: { params: { token: string } }
 ) {
   try {
-    const token = params.token
+    const { token } = params
+    const body = await request.json()
     
     // Proxy request to backend
-    const backendUrl = process.env.BACKEND_URL || 'http://backend:8000'
-    const response = await fetch(`${backendUrl}/public/quotes/${token}/accept`, {
+    const backendResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/public/quotes/${token}/accept`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
     })
-    
-    if (!response.ok) {
-      const errorData = await response.json()
+
+    if (!backendResponse.ok) {
+      const errorData = await backendResponse.json()
       return NextResponse.json(
-        { detail: errorData.detail || 'Bad request' },
-        { status: response.status }
+        { detail: errorData.detail || 'Failed to accept quote' },
+        { status: backendResponse.status }
       )
     }
-    
-    const data = await response.json()
+
+    const data = await backendResponse.json()
     return NextResponse.json(data)
-    
+
   } catch (error) {
-    console.error('Error accepting quote:', error)
+    console.error('Error in public quote accept API route:', error)
     return NextResponse.json(
       { detail: 'Internal server error' },
       { status: 500 }
