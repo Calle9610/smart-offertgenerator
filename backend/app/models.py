@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, String, Numeric, TIMESTAMP, text, ForeignKey, Boolean, Text, Integer, UniqueConstraint
+from sqlalchemy import Column, String, Numeric, TIMESTAMP, text, ForeignKey, Boolean, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 import sqlalchemy as sa
@@ -132,9 +132,9 @@ class Quote(Base):
         "QuoteItem", back_populates="quote", cascade="all, delete-orphan"
     )
     packages = relationship(
-        "QuotePackage", 
+        "QuotePackage",
         foreign_keys="[QuotePackage.quote_id]",
-        back_populates="quote", 
+        back_populates="quote",
         cascade="all, delete-orphan"
     )
     accepted_package = relationship("QuotePackage", foreign_keys=[accepted_package_id], post_update=True)

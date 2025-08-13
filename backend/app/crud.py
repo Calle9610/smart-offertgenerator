@@ -7,20 +7,11 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
 from . import models
-from .schemas import (
-    CompanyCreate,
-    GenerationRuleCreate,
-    ProjectRequirementsCreate,
-    QuoteAdjustmentLogCreate,
-    QuoteEventCreate,
-    QuotePackageCreate,
-    TenantCreate,
-    UserCreate,
-)
+from . import schemas
 
 
 # User operations
-def create_user(db: Session, user: UserCreate) -> models.User:
+def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     """Create a new user."""
     from .auth import get_password_hash
 
@@ -49,7 +40,7 @@ def get_user_by_email(db: Session, email: str) -> models.User:
 
 
 # Tenant operations
-def create_tenant(db: Session, tenant: TenantCreate) -> models.Tenant:
+def create_tenant(db: Session, tenant: schemas.TenantCreate) -> models.Tenant:
     """Create a new tenant."""
     db_tenant = models.Tenant(**tenant.dict())
     db.add(db_tenant)
@@ -64,7 +55,7 @@ def get_tenant_by_domain(db: Session, domain: str) -> models.Tenant:
 
 
 # Company operations
-def create_company(db: Session, company: CompanyCreate) -> models.Company:
+def create_company(db: Session, company: schemas.CompanyCreate) -> models.Company:
     """Create a new company."""
     db_company = models.Company(**company.dict())
     db.add(db_company)
@@ -215,169 +206,60 @@ def get_quote_with_events(db: Session, quote_id: UUID, tenant_id: UUID) -> Optio
 
 # Quote Package operations
 def create_quote_package(
-    db: Session, quote_id: UUID, package_data: QuotePackageCreate
+    db: Session, quote_id: UUID, package_data: schemas.QuotePackageCreate
 ) -> models.QuotePackage:
-    """
-    Create a new quote package.
-
-    Args:
-        db: Database session
-        quote_id: Quote ID to attach package to
-        package_data: Package data from request
-
-    Returns:
-        Created QuotePackage instance
-    """
-    # Convert items to raw dictionaries for JSON storage
-    items_dict = []
-    for item in package_data.items:
-        items_dict.append({
-            "kind": item.kind,
-            "ref": item.ref,
-            "description": item.description,
-            "qty": float(item.qty) if hasattr(item.qty, '__float__') else item.qty,
-            "unit": item.unit,
-            "unit_price": float(item.unit_price) if hasattr(item.unit_price, '__float__') else item.unit_price,
-            "line_total": float(item.line_total) if hasattr(item.line_total, '__float__') else item.line_total,
-        })
-
-    db_package = models.QuotePackage(
+    """Create a new quote package."""
+    package = models.QuotePackage(
         quote_id=quote_id,
         name=package_data.name,
-        items=items_dict,  # Store as raw dictionary
+        items=package_data.items,
         subtotal=package_data.subtotal,
         vat=package_data.vat,
         total=package_data.total,
         is_default=package_data.is_default,
     )
-    db.add(db_package)
+    db.add(package)
     db.commit()
-    db.refresh(db_package)
-    return db_package
+    db.refresh(package)
+    return package
 
 
-def get_quote_packages(db: Session, quote_id: UUID, tenant_id: UUID) -> List[models.QuotePackage]:
-    """
-    Get all packages for a specific quote with tenant validation.
-
-    Multi-tenant security: Only returns packages for quotes belonging to the tenant.
-
-    Args:
-        db: Database session
-        quote_id: Quote ID to get packages for
-        tenant_id: Tenant ID for validation
-
-    Returns:
-        List of QuotePackage instances for the quote
-    """
-    # First verify the quote belongs to the tenant
-    quote = (
-        db.query(models.Quote)
-        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
-        .first()
-    )
-
-    if not quote:
-        return []
-
-    # Get packages for this quote
-    packages = (
-        db.query(models.QuotePackage)
-        .filter(models.QuotePackage.quote_id == quote_id)
-        .order_by(models.QuotePackage.created_at.asc())
-        .all()
-    )
-
-    return packages
+def get_quote_packages(db: Session, quote_id: UUID) -> List[models.QuotePackage]:
+    """Get all packages for a specific quote."""
+    return db.query(models.QuotePackage).filter(
+        models.QuotePackage.quote_id == quote_id
+    ).all()
 
 
 def update_quote_accepted_package(
-    db: Session, quote_id: UUID, package_id: UUID, tenant_id: UUID
+    db: Session, quote_id: UUID, package_id: UUID
 ) -> Optional[models.Quote]:
-    """
-    Update quote to mark a package as accepted.
-
-    Multi-tenant security: Only allows updates to quotes belonging to the tenant.
-
-    Args:
-        db: Database session
-        quote_id: Quote ID to update
-        package_id: Package ID to mark as accepted
-        tenant_id: Tenant ID for validation
-
-    Returns:
-        Updated Quote instance if successful, None if not found or not authorized
-    """
-    # Verify the quote belongs to the tenant
-    quote = (
-        db.query(models.Quote)
-        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
-        .first()
-    )
-
-    if not quote:
-        return None
-
-    # Verify the package belongs to this quote
-    package = (
-        db.query(models.QuotePackage)
-        .filter(models.QuotePackage.id == package_id, models.QuotePackage.quote_id == quote_id)
-        .first()
-    )
-
-    if not package:
-        return None
-
-    # Update the quote
-    quote.accepted_package_id = package_id
-    db.commit()
-    db.refresh(quote)
+    """Update the accepted package for a quote."""
+    quote = db.query(models.Quote).filter(models.Quote.id == quote_id).first()
+    if quote:
+        quote.accepted_package_id = package_id
+        db.commit()
+        db.refresh(quote)
     return quote
 
 
 def generate_quote_packages(
     db: Session, quote_id: UUID, tenant_id: UUID, package_names: List[str], discount_percentages: Optional[List[Decimal]] = None
 ) -> List[models.QuotePackage]:
-    """
-    Generate multiple quote packages based on the original quote items.
-
-    Creates packages with different pricing levels (e.g., Basic, Standard, Premium).
-    Multi-tenant security: Only allows generation for quotes belonging to the tenant.
-
-    Args:
-        db: Database session
-        quote_id: Quote ID to generate packages for
-        tenant_id: Tenant ID for validation
-        package_names: List of package names to generate
-        discount_percentages: Optional list of discount percentages for each package
-
-    Returns:
-        List of generated QuotePackage instances
-    """
-    # Verify the quote belongs to the tenant
-    quote = (
-        db.query(models.Quote)
-        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
-        .first()
-    )
-
+    """Generate quote packages with different discount levels."""
+    # Get the base quote and items
+    quote = get_quote_by_id_and_tenant(db, quote_id, tenant_id)
     if not quote:
         return []
 
     # Get quote items
-    quote_items = (
-        db.query(models.QuoteItem)
-        .filter(models.QuoteItem.quote_id == quote_id)
-        .all()
-    )
-
-    if not quote_items:
+    items = db.query(models.QuoteItem).filter(models.QuoteItem.quote_id == quote_id).all()
+    if not items:
         return []
 
-    # Convert items to package format
-    base_items = []
-    for item in quote_items:
-        base_items.append({
+    packages = []
+    base_items = [
+        {
             "kind": item.kind,
             "ref": item.ref,
             "description": item.description,
@@ -385,44 +267,43 @@ def generate_quote_packages(
             "unit": item.unit,
             "unit_price": item.unit_price,
             "line_total": item.line_total,
-        })
+        }
+        for item in items
+    ]
 
-    # Generate packages
-    packages = []
+    # Generate packages with different discount levels
     for i, package_name in enumerate(package_names):
-        # Apply discount if specified
         discount = discount_percentages[i] if discount_percentages and i < len(discount_percentages) else Decimal("0")
         discount_multiplier = Decimal("1") - (discount / Decimal("100"))
 
-        # Create package items with adjusted pricing
         package_items = []
         subtotal = Decimal("0")
+
         for item in base_items:
             adjusted_unit_price = item["unit_price"] * discount_multiplier
             adjusted_line_total = item["qty"] * adjusted_unit_price
+
             package_items.append({
                 "kind": item["kind"],
                 "ref": item["ref"],
                 "description": item["description"],
-                "qty": float(item["qty"]),  # Convert Decimal to float for JSON serialization
+                "qty": float(item["qty"]),
                 "unit": item["unit"],
-                "unit_price": float(adjusted_unit_price),  # Convert Decimal to float
-                "line_total": float(adjusted_line_total),  # Convert Decimal to float
+                "unit_price": float(adjusted_unit_price),
+                "line_total": float(adjusted_line_total),
             })
             subtotal += adjusted_line_total
 
-        # Calculate VAT and total
         vat = subtotal * (quote.vat / quote.subtotal) if quote.subtotal > 0 else Decimal("0")
         total = subtotal + vat
 
-        # Create package
-        package_data = QuotePackageCreate(
+        package_data = schemas.QuotePackageCreate(
             name=package_name,
             items=package_items,
-            subtotal=float(subtotal),  # Convert to float for JSON serialization
-            vat=float(vat),  # Convert to float for JSON serialization
-            total=float(total),  # Convert to float for JSON serialization
-            is_default=(i == 0),  # First package is default
+            subtotal=float(subtotal),
+            vat=float(vat),
+            total=float(total),
+            is_default=(i == 0),
         )
 
         package = create_quote_package(db, quote_id, package_data)
@@ -433,7 +314,7 @@ def generate_quote_packages(
 
 # Quote Event operations
 def create_quote_event(
-    db: Session, event_data: QuoteEventCreate
+    db: Session, event_data: schemas.QuoteEventCreate
 ) -> models.QuoteEvent:
     """
     Create new quote event.
@@ -491,7 +372,7 @@ def get_quote_events(
 
 # Project Requirements operations
 def create_project_requirements(
-    db: Session, requirements: ProjectRequirementsCreate
+    db: Session, requirements: schemas.ProjectRequirementsCreate
 ) -> models.ProjectRequirements:
     """
     Create new project requirements.

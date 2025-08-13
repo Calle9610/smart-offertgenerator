@@ -778,10 +778,6 @@ async def auto_generate_quote(
                 )
                 confidence_levels.append(confidence)
 
-        # Calculate totals
-        subtotal = sum(item.line_total for item in generated_items)
-        vat = subtotal * float(profile.vat_rate) / 100.0
-
         # Apply auto-tuning if available
         tuning_applied = False
         tuning_insights = None
@@ -1005,7 +1001,7 @@ async def send_quote(
         public_url = f"{public_app_url}/public/quote/{quote.public_token}"
 
         # Send email via stub (placeholder for SendGrid integration)
-        print(f"📧 SENDING QUOTE EMAIL:")
+        print("📧 SENDING QUOTE EMAIL:")
         print(f"   To: {send_request.toEmail}")
         print(f"   Quote ID: {quote_id}")
         print(f"   Public URL: {public_url}")
