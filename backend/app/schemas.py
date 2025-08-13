@@ -401,4 +401,99 @@ class QuoteOut(BaseModel):
     vat: Decimal
     total: Decimal
     status: str
+    public_token: str
     created_at: str
+    updated_at: str
+
+
+class QuoteEventCreate(BaseModel):
+    """Schema for creating quote events."""
+    
+    quote_id: UUID
+    type: str = Field(..., description="Event type: sent, opened, accepted, declined")
+    meta: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+
+
+class QuoteEventOut(BaseModel):
+    """Schema for quote event output."""
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: UUID
+    quote_id: UUID
+    type: str
+    created_at: str
+    meta: Dict[str, Any]
+    
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def convert_datetime(cls, v):
+        """Convert datetime to ISO format string."""
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
+
+class QuoteWithEvents(BaseModel):
+    """Schema for quote with its events."""
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: UUID
+    customer_name: str
+    project_name: Optional[str] = None
+    company_id: UUID
+    profile_id: UUID
+    currency: str
+    subtotal: Decimal
+    vat: Decimal
+    total: Decimal
+    status: str
+    public_token: str
+    created_at: str
+    updated_at: str
+    events: List[QuoteEventOut] = Field(default_factory=list)
+
+
+class QuoteSendRequest(BaseModel):
+    """Schema for sending a quote via email."""
+    
+    toEmail: str = Field(..., description="Customer email address")
+    message: Optional[str] = Field(None, description="Optional custom message to include")
+
+
+class QuoteSendResponse(BaseModel):
+    """Response schema for quote send operation."""
+    
+    sent: bool = Field(..., description="Whether the email was sent successfully")
+    public_url: str = Field(..., description="Public URL for the quote")
+    message: str = Field(..., description="Status message")
+
+
+class PublicQuoteItem(BaseModel):
+    """Public view of quote item for customers."""
+    
+    kind: str = Field(..., description="Item type: labor, material, or custom")
+    description: Optional[str] = Field(None, description="Item description")
+    qty: Decimal = Field(..., description="Quantity")
+    unit: str = Field(..., description="Unit of measurement")
+    unit_price: Decimal = Field(..., description="Unit price")
+    line_total: Decimal = Field(..., description="Line total")
+
+
+class PublicQuote(BaseModel):
+    """Public view of quote for customers (no sensitive internal data)."""
+    
+    company_name: Optional[str] = Field(None, description="Company name")
+    project_name: Optional[str] = Field(None, description="Project name")
+    customer_name: str = Field(..., description="Customer name (may be masked)")
+    currency: str = Field(..., description="Currency")
+    items: List[PublicQuoteItem] = Field(..., description="Quote items")
+    subtotal: Decimal = Field(..., description="Subtotal")
+    vat: Decimal = Field(..., description="VAT amount")
+    total: Decimal = Field(..., description="Total amount")
+    summary: Optional[str] = Field(None, description="Project summary")
+    assumptions: Optional[str] = Field(None, description="Project assumptions")
+    exclusions: Optional[str] = Field(None, description="What's not included")
+    timeline: Optional[str] = Field(None, description="Project timeline")
+    created_at: str = Field(..., description="Quote creation date")

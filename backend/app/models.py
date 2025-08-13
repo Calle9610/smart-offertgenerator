@@ -9,6 +9,7 @@ from sqlalchemy import (
     String,
     Text,
     text,
+    CheckConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
@@ -120,7 +121,9 @@ class Quote(Base):
     vat = Column(Numeric(12, 2), server_default=text("0"))
     total = Column(Numeric(12, 2), server_default=text("0"))
     status = Column(String, nullable=False, server_default=text("'draft'"))
+    public_token = Column(String(64), unique=True, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"), onupdate=text("now()"))
 
     # Relationships
     tenant = relationship("Tenant")
@@ -133,6 +136,9 @@ class Quote(Base):
     project_requirements = relationship("ProjectRequirements", back_populates="quote")
     adjustment_logs = relationship(
         "QuoteAdjustmentLog", back_populates="quote", cascade="all, delete-orphan"
+    )
+    events = relationship(
+        "QuoteEvent", back_populates="quote", cascade="all, delete-orphan"
     )
 
 
@@ -152,6 +158,29 @@ class QuoteItem(Base):
 
     # Relationships
     quote = relationship("Quote", back_populates="items")
+
+
+class QuoteEvent(Base):
+    """
+    Quote events for tracking customer interactions.
+    
+    Tracks events like when a quote is sent, opened, accepted, or declined.
+    All events are scoped by quote_id and include metadata for additional context.
+    """
+    
+    __tablename__ = "quote_event"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quote_id = Column(UUID(as_uuid=True), ForeignKey("quote.id", ondelete="CASCADE"), nullable=False)
+    type = Column(String, nullable=False)  # sent, opened, accepted, declined
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
+    meta = Column(JSONB, server_default="{}")  # Additional metadata (IP, user agent, etc.)
+    
+    # Relationships
+    quote = relationship("Quote", back_populates="events")
+    
+    __table_args__ = (
+        CheckConstraint("type IN ('sent', 'opened', 'accepted', 'declined')", name='valid_event_type'),
+    )
 
 
 class ProjectRequirements(Base):

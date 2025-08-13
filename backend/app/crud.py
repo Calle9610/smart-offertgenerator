@@ -1,8 +1,9 @@
 from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
+import secrets
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from . import models
 from .schemas import (
@@ -10,6 +11,7 @@ from .schemas import (
     GenerationRuleCreate,
     ProjectRequirementsCreate,
     QuoteAdjustmentLogCreate,
+    QuoteEventCreate,
     TenantCreate,
     UserCreate,
 )
@@ -77,6 +79,9 @@ def get_companies_by_tenant(db: Session, tenant_id: UUID) -> List[models.Company
 # Quote operations
 def create_quote(db: Session, tenant_id: UUID, user_id: UUID, data: dict) -> str:
     """Create a quote with tenant and user context."""
+    # Generate unique public token for customer access
+    public_token = secrets.token_hex(16)  # 32-character hex string
+    
     q = models.Quote(
         tenant_id=tenant_id,
         company_id=data["company_id"],
@@ -88,6 +93,7 @@ def create_quote(db: Session, tenant_id: UUID, user_id: UUID, data: dict) -> str
         subtotal=data["subtotal"],
         vat=data["vat"],
         total=data["total"],
+        public_token=public_token,
     )
     db.add(q)
     db.flush()
@@ -122,6 +128,47 @@ def get_quote_by_id_and_tenant(
     return (
         db.query(models.Quote)
         .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
+        .first()
+    )
+
+
+def get_quote_by_public_token(db: Session, public_token: str) -> Optional[models.Quote]:
+    """Get a quote by its public token for customer access."""
+    return db.query(models.Quote).filter(models.Quote.public_token == public_token).first()
+
+
+# Quote Event operations
+def create_quote_event(db: Session, event: QuoteEventCreate) -> models.QuoteEvent:
+    """Create a new quote event for tracking customer interactions."""
+    db_event = models.QuoteEvent(
+        quote_id=event.quote_id,
+        type=event.type,
+        meta=event.meta,
+    )
+    db.add(db_event)
+    db.commit()
+    db.refresh(db_event)
+    return db_event
+
+
+def get_quote_events(db: Session, quote_id: UUID) -> List[models.QuoteEvent]:
+    """Get all events for a specific quote."""
+    return (
+        db.query(models.QuoteEvent)
+        .filter(models.QuoteEvent.quote_id == quote_id)
+        .order_by(models.QuoteEvent.created_at.desc())
+        .all()
+    )
+
+
+def get_quote_with_events(
+    db: Session, quote_id: UUID, tenant_id: UUID
+) -> Optional[models.Quote]:
+    """Get a quote with its events, ensuring it belongs to the tenant."""
+    return (
+        db.query(models.Quote)
+        .filter(models.Quote.id == quote_id, models.Quote.tenant_id == tenant_id)
+        .options(joinedload(models.Quote.events))
         .first()
     )
 
