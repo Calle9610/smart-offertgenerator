@@ -149,6 +149,7 @@ def upgrade() -> None:
         sa.Column('key', sa.String(), nullable=False),
         sa.Column('rules', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()')),
+        sa.Column('updated_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()')),
         sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['company_id'], ['company.id'])
     )
