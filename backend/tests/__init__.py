@@ -1,1 +1,1 @@
-# Tests package for Smart Quote Generator backend 
+# Tests package for Smart Quote Generator backend

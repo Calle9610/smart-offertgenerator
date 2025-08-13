@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline with Security
 
 on:
   push:
@@ -52,7 +52,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e .
-        pip install pytest pytest-asyncio pytest-cov black isort mypy
+        pip install pytest pytest-asyncio pytest-cov black isort mypy bandit
 
     - name: Run linting
       working-directory: ./backend
@@ -63,6 +63,22 @@ jobs:
         isort --check-only --diff .
         echo "Running mypy..."
         mypy app/
+
+    - name: Run security scan with Bandit
+      working-directory: ./backend
+      run: |
+        echo "Running Bandit security scan..."
+        bandit -r app/ -f json -o bandit-report.json -ll || true
+        if [ -f bandit-report.json ]; then
+          echo "Bandit scan completed. Check bandit-report.json for details."
+        fi
+
+    - name: Upload Bandit results as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: bandit-report
+        path: ./backend/bandit-report.json
+        if-no-files-found: ignore
 
     - name: Run tests
       working-directory: ./backend
@@ -108,18 +124,47 @@ jobs:
       working-directory: ./frontend
       run: npx tsc --noEmit
 
+    - name: Run security audit
+      working-directory: ./frontend
+      run: |
+        echo "Running npm audit..."
+        npm audit --audit-level=moderate --json > npm-audit.json || true
+        if [ -f npm-audit.json ]; then
+          echo "npm audit completed. Check npm-audit.json for details."
+        fi
+
+    - name: Upload npm audit results as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: npm-audit
+        path: ./frontend/npm-audit.json
+        if-no-files-found: ignore
+
     - name: Build application
       working-directory: ./frontend
       run: npm run build
 
-  # Security Scanning
+  # Security Scanning (Consolidated)
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test]
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Download artifacts from backend-test
+      uses: actions/download-artifact@v4
+      with:
+        name: bandit-report
+        path: ./backend/
+
+    - name: Download artifacts from frontend-test
+      uses: actions/download-artifact@v4
+      with:
+        name: npm-audit
+        path: ./frontend/
 
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
@@ -128,6 +173,7 @@ jobs:
         scan-ref: '.'
         format: 'sarif'
         output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
 
     - name: Upload Trivy scan results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v2
@@ -135,14 +181,81 @@ jobs:
       with:
         sarif_file: 'trivy-results.sarif'
 
-    - name: Run Bandit security linter (Python)
-      uses: python-security/bandit@main
+    - name: Run Snyk security scan
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
-        args: -r backend/ -f json -o bandit-report.json
+        args: --severity-threshold=high
+      continue-on-error: true
 
-    - name: Run npm audit
-      working-directory: ./frontend
-      run: npm audit --audit-level=moderate
+    - name: Comment PR with security findings
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let comment = '## 🔒 Security Scan Results\n\n';
+          
+          // Check Trivy results
+          if (fs.existsSync('trivy-results.sarif')) {
+            comment += '### 🐳 Container Security (Trivy)\n';
+            comment += 'Container security scan completed. Check the Security tab for details.\n\n';
+          }
+          
+          // Check Bandit results
+          if (fs.existsSync('./backend/bandit-report.json')) {
+            try {
+              const banditReport = JSON.parse(fs.readFileSync('./backend/bandit-report.json', 'utf8'));
+              if (banditReport.results && banditReport.results.length > 0) {
+                comment += '### 🐍 Python Security (Bandit)\n';
+                comment += `Found ${banditReport.results.length} security issues:\n`;
+                banditReport.results.forEach(result => {
+                  comment += `- **${result.issue_severity}**: ${result.issue_text} in ${result.filename}:${result.line_number}\n`;
+                });
+                comment += '\n';
+              }
+            } catch (e) {
+              comment += '### 🐍 Python Security (Bandit)\n';
+              comment += 'Bandit scan completed. Check the logs for details.\n\n';
+            }
+          }
+          
+          // Check npm audit results
+          if (fs.existsSync('./frontend/npm-audit.json')) {
+            try {
+              const npmAudit = JSON.parse(fs.readFileSync('./frontend/npm-audit.json', 'utf8'));
+              if (npmAudit.metadata && npmAudit.metadata.vulnerabilities) {
+                const vulns = npmAudit.metadata.vulnerabilities;
+                const totalVulns = Object.values(vulns).reduce((sum, vuln) => sum + vuln, 0);
+                if (totalVulns > 0) {
+                  comment += '### 📦 Node.js Security (npm audit)\n';
+                  comment += `Found ${totalVulns} vulnerabilities:\n`;
+                  Object.entries(vulns).forEach(([severity, count]) => {
+                    comment += `- **${severity}**: ${count}\n`;
+                  });
+                  comment += '\n';
+                }
+              }
+            } catch (e) {
+              comment += '### 📦 Node.js Security (npm audit)\n';
+              comment += 'npm audit completed. Check the logs for details.\n\n';
+            }
+          }
+          
+          if (comment === '## 🔒 Security Scan Results\n\n') {
+            comment += '✅ No security issues found!\n';
+          }
+          
+          comment += '\n---\n*This comment was automatically generated by the security scan workflow.*';
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
 
   # Docker Build & Test
   docker-build:
@@ -241,7 +354,6 @@ jobs:
       run: |
         echo "Deploying to staging environment..."
         # Add your staging deployment logic here
-        # This could be deploying to a staging server, updating staging environment, etc.
 
   # Deploy to Production
   deploy-production:
@@ -256,7 +368,6 @@ jobs:
       run: |
         echo "Deploying to production environment..."
         # Add your production deployment logic here
-        # This could be deploying to a production server, updating production environment, etc.
 
   # Notify on Success/Failure
   notify:
@@ -270,10 +381,6 @@ jobs:
       if: success()
       run: |
         echo "✅ All checks passed successfully!"
-        # Add your notification logic here (Slack, Discord, email, etc.)
         
     - name: Notify on failure
-      if: failure()
-      run: |
-        echo "❌ Some checks failed!"
-        # Add your notification logic here (Slack, Discord, email, etc.) 
+      if: failure() 

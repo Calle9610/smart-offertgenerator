@@ -1,5 +1,5 @@
 # Enkel seed som lägger in en Company och PriceProfile
-from .db import SessionLocal, Base, engine
+from .db import Base, SessionLocal, engine
 from .models import Company, PriceProfile
 
 Base.metadata.create_all(engine)
