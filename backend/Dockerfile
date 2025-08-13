@@ -1,7 +1,8 @@
 FROM python:3.11-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies with better error handling
+RUN apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libpq-dev \
@@ -12,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     shared-mime-info \
     pkg-config \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -25,8 +27,7 @@ COPY alembic.ini .
 COPY start.sh .
 
 # Install dependencies including test dependencies
-RUN pip install --no-cache-dir -e .
-RUN pip install --no-cache-dir pytest pytest-asyncio pytest-cov httpx
+RUN pip install --no-cache-dir -e ".[dev,test]"
 
 # Make startup script executable
 RUN chmod +x /app/start.sh
