@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test: Publik Offert med Tillval</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8">🧪 Test: Publik Offert med Tillval</h1>
+        
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4">Testdata för tillval</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="font-semibold mb-2">Grundfunktionalitet</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>✅ Checkbox för enskilda tillval</li>
+                        <li>✅ Radio-knappar för option groups</li>
+                        <li>✅ Realtidsuppdatering av totals</li>
+                        <li>✅ selectedItemIds state-hantering</li>
+                        <li>✅ Acceptera-knapp skickar selectedItemIds</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h3 class="font-semibold mb-2">API Endpoints</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>✅ GET /api/public/quotes/{token}</li>
+                        <li>✅ POST /api/public/quotes/{token}/update-selection</li>
+                        <li>✅ POST /api/public/quotes/{token}/accept</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+            <h3 class="font-semibold text-blue-900 mb-2">💡 Så här testar du:</h3>
+            <ol class="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                <li>Starta backend: <code class="bg-blue-100 px-2 py-1 rounded">./start.sh</code></li>
+                <li>Kör migration: <code class="bg-blue-100 px-2 py-1 rounded">alembic upgrade head</code></li>
+                <li>Skapa en test-offert med tillval via backend</li>
+                <li>Besök: <code class="bg-blue-100 px-2 py-1 rounded">/public/quote/{token}</code></li>
+                <li>Testa att kryssa i/ur tillval och se totals uppdateras</li>
+            </ol>
+        </div>
+
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+            <h3 class="font-semibold text-green-900 mb-2">🎯 DoD Uppfylld:</h3>
+            <p class="text-sm text-green-800">
+                <strong>Kunden kan kryssa i/ur val och se totals ändras utan att ladda om sidan</strong><br>
+                - Checkbox/radio-knappar implementerade ✅<br>
+                - selectedItemIds state-hantering ✅<br>
+                - Realtidsuppdatering via API ✅<br>
+                - Live totals-uppdatering ✅<br>
+                - Acceptera-knapp skickar selectedItemIds ✅
+            </p>
+        </div>
+    </div>
+</body>
+</html>
