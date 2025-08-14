@@ -287,6 +287,25 @@ curl -X POST "http://localhost:8000/quotes/$QUOTE_ID/options" \
 }
 ```
 
+### **3.4 Generera PDF med valda tillval**
+
+```bash
+# Generera PDF som matchar exakt vad kunden valt
+curl -X POST "http://localhost:8000/quotes/$QUOTE_ID/pdf" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "selectedItemIds": ["item-uuid-1", "item-uuid-2"]
+  }' \
+  --output "offert_med_tillval.pdf"
+```
+
+**PDF innehåller:**
+- **Grundarbete & Material** - obligatoriska rader
+- **Valda tillval** - endast valda optional-rader
+- **Summering** baserad på valen
+- **Totals** som matchar kundvyn exakt
+
 ## ✏️ **3. Ändra Qty och Spara Quote med sourceItems**
 
 Skapa en offert med de auto-genererade items som sourceItems:

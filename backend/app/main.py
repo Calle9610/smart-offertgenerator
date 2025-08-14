@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-# from weasyprint import HTML  # Temporarily disabled due to macOS compatibility issues
+from .pdf_generator import pdf_generator
 
 from . import auth, crud, schemas
 from .auto_tuning import create_auto_tuning_engine
@@ -875,16 +875,101 @@ async def auto_generate_quote(
         )
 
 
-# PDF generation endpoint (now with authentication)
-# @app.post("/quotes/{quote_id}/pdf")
-# async def generate_pdf(
-#     quote_id: str,
-#     current_user: User = Depends(auth.get_current_active_user),
-#     db: Session = Depends(get_db),
-# ):
-#     """Generate PDF for a quote (requires authentication)."""
-#     # Temporarily disabled due to WeasyPrint compatibility issues on macOS
-#     raise HTTPException(status_code=501, detail="PDF generation temporarily disabled")
+# PDF generation endpoint (now with authentication and option handling)
+@app.post("/quotes/{quote_id}/pdf")
+async def generate_pdf(
+    quote_id: str,
+    pdf_request: schemas.GeneratePDFRequest,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate PDF for a quote with selected options (requires authentication).
+    
+    The PDF will include only mandatory items + selected optional items,
+    matching exactly what the customer sees in the public view.
+    
+    Example:
+    ```bash
+    curl -X POST "http://localhost:8000/quotes/123e4567-e89b-12d3-a456-426614174000/pdf" \
+         -H "Authorization: Bearer <token>" \
+         -H "Content-Type: application/json" \
+         -d '{
+           "selectedItemIds": ["item-uuid-1", "item-uuid-2"]
+         }'
+    ```
+    """
+    try:
+        # Get quote with tenant validation
+        quote = crud.get_quote_by_id_and_tenant(
+            db, uuid.UUID(quote_id), current_user.tenant_id
+        )
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Get companies for the user
+        companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
+        if not companies:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="No company found for user"
+            )
+        
+        company = companies[0]
+        
+        # Get quote items
+        quote_items = db.query(QuoteItem).filter(
+            QuoteItem.quote_id == quote.id
+        ).all()
+        
+        if not quote_items:
+            raise HTTPException(
+                status_code=404, detail="No items found for this quote"
+            )
+        
+        # Get price profile for VAT calculation
+        profile = db.query(PriceProfile).filter(
+            PriceProfile.id == quote.profile_id
+        ).first()
+        
+        if not profile:
+            raise HTTPException(
+                status_code=404, detail="Price profile not found"
+            )
+        
+        # Generate PDF with selected options
+        pdf_bytes = pdf_generator.generate_quote_pdf(
+            quote=quote,
+            quote_items=quote_items,
+            selected_item_ids=pdf_request.selectedItemIds,
+            company=company,
+            profile=profile
+        )
+        
+        if not pdf_bytes:
+            raise HTTPException(
+                status_code=501, 
+                detail="PDF generation failed - WeasyPrint not available"
+            )
+        
+        # Return PDF as response
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=quote_{quote_id[:8]}.pdf"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate PDF: {str(e)}"
+        )
 
 
 # Test endpoint to create a simple quote for testing

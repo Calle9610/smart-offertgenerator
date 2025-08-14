@@ -773,6 +773,16 @@ class UpdateQuoteOptionsResponse(BaseModel):
     updated_items: List[OptionGroupItem] = Field(..., description="Updated items with selection status")
 
 
+# PDF Generation schemas
+class GeneratePDFRequest(BaseModel):
+    """Request schema for generating PDF with selected options."""
+    
+    selectedItemIds: List[str] = Field(
+        default_factory=list,
+        description="List of selected optional item IDs to include in PDF"
+    )
+
+
 # Public quote selection update schemas
 class PublicQuoteSelectionUpdateRequest(BaseModel):
     """Request schema for updating public quote selection."""
