@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from . import auth, crud, schemas
 from .auto_tuning import create_auto_tuning_engine
 from .db import Base, engine, get_db
-from .models import Company, LaborRate, Material, PriceProfile, Tenant, User, Quote, QuotePackage, QuoteAdjustmentLog
+from .models import Company, LaborRate, Material, PriceProfile, Tenant, User, Quote, QuotePackage, QuoteAdjustmentLog, QuoteItem
 from .pricing import calc_totals
 from .rules_eval import create_rules_evaluator
 
@@ -2294,3 +2294,167 @@ async def update_quote_options(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update quote options: {str(e)}"
         )
+
+
+# Update quote selection endpoint (no authentication required)
+@app.post("/public/quotes/{token}/update-selection")
+async def update_public_quote_selection(
+    token: str,
+    selection_request: schemas.PublicQuoteSelectionUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Update selected options for a public quote and recalculate totals.
+    
+    This endpoint allows customers to select/deselect optional items and see
+    real-time updates to the quote total without requiring authentication.
+    
+    Example:
+    ```bash
+    curl -X POST "http://localhost:8000/public/quotes/abc123/update-selection" \
+         -H "Content-Type: application/json" \
+         -d '{
+           "selectedItemIds": ["item-uuid-1", "item-uuid-2"]
+         }'
+    ```
+    
+    Response includes:
+    - items: List of all quote items with selection status
+    - subtotal: Updated subtotal based on selected items
+    - vat: Updated VAT amount
+    - total: Updated total amount
+    """
+    try:
+        # Get quote by public token
+        quote = crud.get_quote_by_public_token(db, token)
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Check if quote can be updated (only SENT or REVIEWED status)
+        if quote.status not in ["SENT", "REVIEWED"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Quote cannot be updated in status '{quote.status}'. Only 'SENT' or 'REVIEWED' quotes can be updated."
+            )
+        
+        # Get all quote items
+        quote_items = db.query(QuoteItem).filter(
+            QuoteItem.quote_id == quote.id
+        ).all()
+        
+        if not quote_items:
+            raise HTTPException(
+                status_code=404, detail="No items found for this quote"
+            )
+        
+        # Create a set of selected item IDs for fast lookup
+        selected_ids = set(selection_request.selectedItemIds)
+        
+        # Mark items as selected and calculate totals
+        base_subtotal = Decimal('0')
+        optional_subtotal = Decimal('0')
+        updated_items = []
+        
+        for item in quote_items:
+            # Mark isSelected based on whether item ID is in selectedItemIds
+            is_selected = str(item.id) in selected_ids
+            
+            # Calculate line total for this item
+            if item.is_optional:
+                # For optional items, only include if selected
+                if is_selected:
+                    optional_subtotal += item.line_total
+                    line_total = item.line_total
+                else:
+                    line_total = Decimal('0')
+            else:
+                # For mandatory items, always include
+                base_subtotal += item.line_total
+                line_total = item.line_total
+            
+            # Create item response with selection status
+            item_response = {
+                "id": str(item.id),
+                "kind": item.kind,
+                "ref": item.ref,
+                "description": item.description,
+                "qty": item.qty,
+                "unit": item.unit,
+                "unit_price": item.unit_price,
+                "line_total": float(line_total),
+                "is_optional": item.is_optional,
+                "option_group": item.option_group,
+                "isSelected": is_selected
+            }
+            updated_items.append(item_response)
+        
+        # Calculate new totals
+        new_subtotal = base_subtotal + optional_subtotal
+        
+        # Get VAT rate from quote profile
+        profile = db.query(PriceProfile).filter(
+            PriceProfile.id == quote.profile_id
+        ).first()
+        
+        vat_rate = float(profile.vat_rate) / 100.0 if profile else 0.25
+        new_vat = new_subtotal * Decimal(str(vat_rate))
+        new_total = new_subtotal + new_vat
+        
+        # Log the selection update event
+        try:
+            # Calculate differences for logging
+            previous_total = quote.total
+            total_difference = new_total - previous_total
+            
+            # Get previous selection state (this would need to be tracked, but for now we'll log the change)
+            event_meta = {
+                "ip": "unknown",  # Could extract from request if needed
+                "user_agent": "unknown",  # Could extract from request if needed
+                "updated_at": datetime.now().isoformat(),
+                "selected_item_count": len(selected_ids),
+                "total_items": len(quote_items),
+                "previous_total": float(previous_total),
+                "new_total": float(new_total),
+                "total_difference": float(total_difference),
+                "selected_item_ids": list(selected_ids),
+                "base_subtotal": float(base_subtotal),
+                "optional_subtotal": float(optional_subtotal)
+            }
+            
+            event = crud.create_quote_event(
+                db,
+                schemas.QuoteEventCreate(
+                    quote_id=quote.id,
+                    type="option_updated",
+                    meta=event_meta
+                )
+            )
+            print(f"✅ Quote selection update event created: {event.id}")
+        except Exception as e:
+            print(f"Warning: Could not create selection update event: {e}")
+            # Don't fail the request if event creation fails
+        
+        print(f"🔄 Quote {quote.id} selection updated! New total: {new_total:.2f} SEK (was: {previous_total:.2f} SEK)")
+        
+        return {
+            "items": updated_items,
+            "subtotal": float(new_subtotal),
+            "vat": float(new_vat),
+            "total": float(new_total),
+            "base_subtotal": float(base_subtotal),
+            "optional_subtotal": float(optional_subtotal),
+            "selected_item_count": len(selected_ids),
+            "message": f"Quote selection updated successfully. New total: {new_total:.2f} SEK"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating quote selection: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to update quote selection")
+
+
+# ============================================================================
+# ADMIN RULES ENDPOINTS
+# ============================================================================

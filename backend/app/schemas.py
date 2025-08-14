@@ -771,3 +771,39 @@ class UpdateQuoteOptionsResponse(BaseModel):
     new_total: Decimal = Field(..., description="Updated quote total")
     message: str = Field(..., description="Status message")
     updated_items: List[OptionGroupItem] = Field(..., description="Updated items with selection status")
+
+
+# Public quote selection update schemas
+class PublicQuoteSelectionUpdateRequest(BaseModel):
+    """Request schema for updating public quote selection."""
+    
+    selectedItemIds: List[str] = Field(..., description="List of selected item IDs")
+
+
+class PublicQuoteSelectionItem(BaseModel):
+    """Schema for quote item in public selection update response."""
+    
+    id: str = Field(..., description="Item ID")
+    kind: str = Field(..., description="Item type: labor, material, or custom")
+    ref: Optional[str] = Field(None, description="Item reference code")
+    description: Optional[str] = Field(None, description="Item description")
+    qty: Decimal = Field(..., description="Quantity")
+    unit: Optional[str] = Field(None, description="Unit of measurement")
+    unit_price: Decimal = Field(..., description="Unit price")
+    line_total: float = Field(..., description="Line total (0 if optional and not selected)")
+    is_optional: bool = Field(..., description="Whether this item is optional")
+    option_group: Optional[str] = Field(None, description="Option group name")
+    isSelected: bool = Field(..., description="Whether this item is currently selected")
+
+
+class PublicQuoteSelectionResponse(BaseModel):
+    """Response schema for public quote selection update."""
+    
+    items: List[PublicQuoteSelectionItem] = Field(..., description="List of all quote items with selection status")
+    subtotal: float = Field(..., description="Updated subtotal based on selected items")
+    vat: float = Field(..., description="Updated VAT amount")
+    total: float = Field(..., description="Updated total amount")
+    base_subtotal: float = Field(..., description="Subtotal for mandatory items only")
+    optional_subtotal: float = Field(..., description="Subtotal for selected optional items")
+    selected_item_count: int = Field(..., description="Number of selected optional items")
+    message: str = Field(..., description="Status message")

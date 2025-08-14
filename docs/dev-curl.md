@@ -633,6 +633,154 @@ echo $TUNING_RESPONSE | jq '.insights[] | {item_ref, median_factor, n, interpret
 echo "Test workflow completed!"
 ```
 
+## 🌐 **PUBLIKA ENDPOINTS (Ingen autentisering krävs)**
+
+### **1. Visa Publik Offert**
+
+```bash
+# Hämta offert via publikt token
+curl -X GET "http://localhost:8000/public/quotes/abc123def456" \
+  -H "Content-Type: application/json"
+```
+
+**Förväntat svar:**
+```json
+{
+  "company_name": "Testföretag AB",
+  "project_name": "Badrumsrenovering",
+  "customer_name": "Testkund AB",
+  "currency": "SEK",
+  "items": [
+    {
+      "kind": "labor",
+      "description": "Snickeri",
+      "qty": 20.0,
+      "unit": "hour",
+      "unit_price": 650.0,
+      "line_total": 13000.0,
+      "is_optional": false
+    },
+    {
+      "kind": "material",
+      "description": "Premium kakel",
+      "qty": 15.0,
+      "unit": "m2",
+      "unit_price": 350.0,
+      "line_total": 5250.0,
+      "is_optional": true,
+      "option_group": "materials"
+    }
+  ],
+  "subtotal": 18250.0,
+  "vat": 4562.5,
+  "total": 22812.5,
+  "packages": [],
+  "accepted_package_id": null
+}
+```
+
+### **2. Uppdatera Tillval (Realtid)**
+
+```bash
+# Uppdatera valda tillval och få nya totals
+curl -X POST "http://localhost:8000/public/quotes/abc123def456/update-selection" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "selectedItemIds": ["item-uuid-1", "item-uuid-3"]
+  }'
+```
+
+**Förväntat svar:**
+```json
+{
+  "items": [
+    {
+      "id": "item-uuid-1",
+      "kind": "labor",
+      "description": "Snickeri",
+      "qty": 20.0,
+      "unit": "hour",
+      "unit_price": 650.0,
+      "line_total": 13000.0,
+      "is_optional": false,
+      "option_group": null,
+      "isSelected": true
+    },
+    {
+      "id": "item-uuid-2",
+      "kind": "material",
+      "description": "Premium kakel",
+      "qty": 15.0,
+      "unit": "m2",
+      "unit_price": 350.0,
+      "line_total": 5250.0,
+      "is_optional": true,
+      "option_group": "materials",
+      "isSelected": true
+    },
+    {
+      "id": "item-uuid-3",
+      "kind": "material",
+      "description": "Extra detaljarbete",
+      "qty": 8.0,
+      "unit": "hour",
+      "unit_price": 750.0,
+      "line_total": 6000.0,
+      "is_optional": true,
+      "option_group": "extra_features",
+      "isSelected": true
+    }
+  ],
+  "subtotal": 24250.0,
+  "vat": 6062.5,
+  "total": 30312.5,
+  "base_subtotal": 13000.0,
+  "optional_subtotal": 11250.0,
+  "selected_item_count": 2,
+  "message": "Quote selection updated successfully. New total: 30312.50 SEK"
+}
+```
+
+### **3. Acceptera Offert**
+
+```bash
+# Acceptera offert (idempotent)
+curl -X POST "http://localhost:8000/public/quotes/abc123def456/accept" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "packageId": "package-uuid-1"
+  }'
+```
+
+**Förväntat svar:**
+```json
+{
+  "message": "Quote accepted successfully with package: Premium",
+  "status": "ACCEPTED",
+  "quote_id": "quote-uuid-1",
+  "package_id": "package-uuid-1",
+  "package_name": "Premium"
+}
+```
+
+### **4. Avböj Offert**
+
+```bash
+# Avböj offert (idempotent)
+curl -X POST "http://localhost:8000/public/quotes/abc123def456/decline" \
+  -H "Content-Type: application/json"
+```
+
+**Förväntat svar:**
+```json
+{
+  "message": "Quote declined successfully",
+  "status": "DECLINED"
+}
+```
+
+## 🔐 **AUTENTISERADE ENDPOINTS**
+
 ## ⚠️ **Viktiga Noter**
 
 1. **Token hantering:** JWT tokens har en begränsad livslängd. Om du får 401-fel, logga in igen.
