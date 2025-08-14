@@ -16,6 +16,10 @@ class Tenant(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
+    # Relationships
+    users = relationship("User", back_populates="tenant")
+    companies = relationship("Company", back_populates="tenant")
+
 
 class User(Base):
     __tablename__ = "user"
@@ -31,6 +35,7 @@ class User(Base):
 
     # Relationships
     tenant = relationship("Tenant", back_populates="users")
+    company = relationship("Company", back_populates="users")
     quotes = relationship("Quote", back_populates="user")
     adjustment_logs = relationship("QuoteAdjustmentLog", back_populates="user")
 
@@ -42,6 +47,7 @@ class Company(Base):
     name = Column(String, nullable=False)
 
     # Relationships
+    tenant = relationship("Tenant", back_populates="companies")
     users = relationship("User", back_populates="company")
     price_profiles = relationship("PriceProfile", back_populates="company")
     labor_rates = relationship("LaborRate", back_populates="company")

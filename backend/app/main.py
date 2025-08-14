@@ -1,5 +1,5 @@
 import os
-import tempfile
+# import tempfile  # Temporarily disabled
 import time
 import traceback
 import uuid
@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from weasyprint import HTML
+# from weasyprint import HTML  # Temporarily disabled due to macOS compatibility issues
 
 from . import auth, crud, schemas
 from .auto_tuning import create_auto_tuning_engine
@@ -876,65 +876,15 @@ async def auto_generate_quote(
 
 
 # PDF generation endpoint (now with authentication)
-@app.post("/quotes/{quote_id}/pdf")
-async def generate_pdf(
-    quote_id: str,
-    current_user: User = Depends(auth.get_current_active_user),
-    db: Session = Depends(get_db),
-):
-    """Generate PDF for a quote (requires authentication)."""
-    try:
-        # Get quote with tenant validation
-        quote = crud.get_quote_by_id_and_tenant(
-            db, uuid.UUID(quote_id), current_user.tenant_id
-        )
-        if not quote:
-            raise HTTPException(status_code=404, detail="Quote not found")
-
-        # Get company and profile info
-        company = db.query(Company).filter(Company.id == quote.company_id).first()
-        profile = (
-            db.query(PriceProfile).filter(PriceProfile.id == quote.profile_id).first()
-        )
-
-        # Prepare template context
-        context = {
-            "quote": quote,
-            "company": company,
-            "profile": profile,
-            "items": quote.items,
-            "str": str,  # Make str function available in template
-        }
-
-        # Render template
-        template = template_env.get_template("quote_template.html")
-        html_content = template.render(**context)
-        print("Template rendered successfully")
-
-        # Generate PDF
-        print("Generating PDF...")
-        pdf = HTML(string=html_content).write_pdf()
-        print(f"PDF generated, size: {len(pdf)} bytes")
-
-        # Save to temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(pdf)
-            tmp_file_path = tmp_file.name
-            print(f"PDF saved to: {tmp_file_path}")
-
-        # Return PDF file
-        from fastapi.responses import FileResponse
-
-        return FileResponse(
-            tmp_file_path,
-            media_type="application/pdf",
-            filename=f"quote_{quote_id[:8]}.pdf",
-        )
-
-    except Exception as e:
-        print(f"Error generating PDF: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Failed to generate PDF")
+# @app.post("/quotes/{quote_id}/pdf")
+# async def generate_pdf(
+#     quote_id: str,
+#     current_user: User = Depends(auth.get_current_active_user),
+#     db: Session = Depends(get_db),
+# ):
+#     """Generate PDF for a quote (requires authentication)."""
+#     # Temporarily disabled due to WeasyPrint compatibility issues on macOS
+#     raise HTTPException(status_code=501, detail="PDF generation temporarily disabled")
 
 
 # Test endpoint to create a simple quote for testing
