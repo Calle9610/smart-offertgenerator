@@ -35,7 +35,6 @@ class User(Base):
 
     # Relationships
     tenant = relationship("Tenant", back_populates="users")
-    company = relationship("Company", back_populates="users")
     quotes = relationship("Quote", back_populates="user")
     adjustment_logs = relationship("QuoteAdjustmentLog", back_populates="user")
 
@@ -48,7 +47,6 @@ class Company(Base):
 
     # Relationships
     tenant = relationship("Tenant", back_populates="companies")
-    users = relationship("User", back_populates="company")
     price_profiles = relationship("PriceProfile", back_populates="company")
     labor_rates = relationship("LaborRate", back_populates="company")
     materials = relationship("Material", back_populates="company")
