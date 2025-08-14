@@ -1,6 +1,6 @@
 import secrets
 from decimal import Decimal
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session, joinedload
@@ -112,6 +112,8 @@ def create_quote(db: Session, tenant_id: UUID, user_id: UUID, data: dict) -> str
             unit=item.get("unit"),
             unit_price=item["unit_price"],
             line_total=item["unit_price"] * item["qty"],
+            is_optional=item.get("is_optional", False),
+            option_group=item.get("option_group"),
         )
         db.add(qi)
 
@@ -739,3 +741,168 @@ def get_material_by_code(
         models.Material.company_id == company_id,
         models.Material.code == code
     ).first()
+
+
+# Option Groups CRUD operations
+def get_quote_option_groups(
+    db: Session, quote_id: UUID, company_id: UUID
+) -> List[Dict[str, Any]]:
+    """
+    Get option groups for a quote with their items.
+    
+    Multi-tenant security: Only returns data for the specified company.
+    
+    Args:
+        db: Database session
+        quote_id: Quote ID to get options for
+        company_id: Company ID for validation
+        
+    Returns:
+        List of option groups with their items
+    """
+    # Get all optional items for this quote
+    optional_items = db.query(models.QuoteItem).filter(
+        models.QuoteItem.quote_id == quote_id,
+        models.QuoteItem.is_optional == True
+    ).all()
+    
+    if not optional_items:
+        return []
+    
+    # Group items by option_group
+    option_groups = {}
+    for item in optional_items:
+        group_name = item.option_group or "general"
+        
+        if group_name not in option_groups:
+            option_groups[group_name] = {
+                "name": group_name,
+                "title": _get_option_group_title(group_name),
+                "description": _get_option_group_description(group_name),
+                "type": _get_option_group_type(group_name),
+                "items": [],
+                "selected_items": []
+            }
+        
+        option_groups[group_name]["items"].append({
+            "id": str(item.id),
+            "kind": item.kind,
+            "ref": item.ref,
+            "description": item.description,
+            "qty": item.qty,
+            "unit": item.unit,
+            "unit_price": item.unit_price,
+            "line_total": item.line_total,
+            "is_optional": item.is_optional,
+            "option_group": item.option_group,
+            "is_selected": True  # Default to selected for now
+        })
+    
+    return list(option_groups.values())
+
+
+def update_quote_options(
+    db: Session, quote_id: UUID, company_id: UUID, selected_items: List[UUID]
+) -> Dict[str, Any]:
+    """
+    Update selected options for a quote and recalculate totals.
+    
+    Multi-tenant security: Only allows updates to quotes belonging to the company.
+    
+    Args:
+        db: Database session
+        quote_id: Quote ID to update
+        company_id: Company ID for validation
+        selected_items: List of item IDs to mark as selected
+        
+    Returns:
+        Dict with updated quote information
+    """
+    # Verify quote belongs to company
+    quote = db.query(models.Quote).filter(
+        models.Quote.id == quote_id,
+        models.Quote.company_id == company_id
+    ).first()
+    
+    if not quote:
+        raise ValueError("Quote not found or access denied")
+    
+    # Get all optional items for this quote
+    optional_items = db.query(models.QuoteItem).filter(
+        models.QuoteItem.quote_id == quote_id,
+        models.QuoteItem.is_optional == True
+    ).all()
+    
+    # Calculate base total (without optional items)
+    base_items = db.query(models.QuoteItem).filter(
+        models.QuoteItem.quote_id == quote_id,
+        models.QuoteItem.is_optional == False
+    ).all()
+    
+    base_subtotal = sum(item.line_total for item in base_items)
+    
+    # Calculate new total with selected optional items
+    selected_optional_items = db.query(models.QuoteItem).filter(
+        models.QuoteItem.id.in_(selected_items),
+        models.QuoteItem.quote_id == quote_id,
+        models.QuoteItem.is_optional == True
+    ).all()
+    
+    optional_subtotal = sum(item.line_total for item in selected_optional_items)
+    new_subtotal = base_subtotal + optional_subtotal
+    
+    # Apply VAT rate from quote profile
+    profile = db.query(models.PriceProfile).filter(
+        models.PriceProfile.id == quote.profile_id
+    ).first()
+    
+    vat_rate = float(profile.vat_rate) / 100.0 if profile else 0.25
+    new_vat = new_subtotal * Decimal(str(vat_rate))
+    new_total = new_subtotal + new_vat
+    
+    # Update quote totals
+    quote.subtotal = new_subtotal
+    quote.vat = new_vat
+    quote.total = new_total
+    quote.updated_at = func.now()
+    
+    db.commit()
+    db.refresh(quote)
+    
+    return {
+        "quote_id": str(quote.id),
+        "new_total": float(new_total),
+        "base_total": float(base_subtotal),
+        "optional_total": float(optional_subtotal),
+        "selected_items": [str(item.id) for item in selected_optional_items]
+    }
+
+
+def _get_option_group_title(group_name: str) -> str:
+    """Get human-readable title for an option group."""
+    titles = {
+        "finish_level": "Utförandenivå",
+        "extra_features": "Extra funktioner",
+        "materials": "Materialval",
+        "services": "Tjänster",
+        "general": "Tillval"
+    }
+    return titles.get(group_name, group_name.replace("_", " ").title())
+
+
+def _get_option_group_description(group_name: str) -> str:
+    """Get description for an option group."""
+    descriptions = {
+        "finish_level": "Välj utförandenivå för projektet",
+        "extra_features": "Lägg till extra funktioner och förbättringar",
+        "materials": "Välj materialkvalitet och typ",
+        "services": "Välj extra tjänster som ska ingå",
+        "general": "Allmänna tillval för projektet"
+    }
+    return descriptions.get(group_name, f"Alternativ för {group_name}")
+
+
+def _get_option_group_type(group_name: str) -> str:
+    """Get the type of option group (single or multiple choice)."""
+    single_choice_groups = ["finish_level", "materials"]
+    return "single" if group_name in single_choice_groups else "multiple"

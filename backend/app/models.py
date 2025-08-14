@@ -36,7 +36,6 @@ class User(Base):
     # Relationships
     tenant = relationship("Tenant", back_populates="users")
     quotes = relationship("Quote", back_populates="user")
-    adjustment_logs = relationship("QuoteAdjustmentLog", back_populates="user")
 
 
 class Company(Base):
@@ -164,6 +163,8 @@ class QuoteItem(Base):
     unit = Column(String)
     unit_price = Column(Numeric(12, 2), nullable=False)
     line_total = Column(Numeric(12, 2), nullable=False)
+    is_optional = Column(Boolean, nullable=False, server_default=text("false"))
+    option_group = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
     # Relationships

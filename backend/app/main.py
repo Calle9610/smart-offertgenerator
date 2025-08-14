@@ -2145,3 +2145,152 @@ async def test_generation_rule(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error testing rule: {str(e)}"
         )
+
+
+# ============================================================================
+# OPTION GROUPS ENDPOINTS
+# ============================================================================
+
+@app.get("/quotes/{quote_id}/options", response_model=schemas.QuoteOptionGroupsResponse)
+async def get_quote_option_groups(
+    quote_id: str,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get option groups for a quote with their items.
+    
+    Multi-tenant security: Only returns options for quotes belonging to the user's company.
+    
+    Example:
+    ```bash
+    curl -X GET "http://localhost:8000/quotes/123e4567-e89b-12d3-a456-426614174000/options" \
+         -H "Authorization: Bearer <token>"
+    ```
+    
+    Response includes:
+    - option_groups: List of option groups with their items
+    - current_total: Current quote total with selected options
+    - base_total: Base quote total without optional items
+    """
+    # Get companies for the user
+    companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
+    if not companies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No company found for user"
+        )
+    
+    company_id = companies[0].id
+    
+    # Get option groups for the quote
+    option_groups = crud.get_quote_option_groups(db, uuid.UUID(quote_id), company_id)
+    
+    # Get current quote totals
+    quote = crud.get_quote_by_id_and_tenant(db, uuid.UUID(quote_id), current_user.tenant_id)
+    if not quote:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found"
+        )
+    
+    # Calculate base total (without optional items)
+    base_items = db.query(models.QuoteItem).filter(
+        models.QuoteItem.quote_id == uuid.UUID(quote_id),
+        models.QuoteItem.is_optional == False
+    ).all()
+    
+    base_subtotal = sum(item.line_total for item in base_items)
+    
+    return schemas.QuoteOptionGroupsResponse(
+        quote_id=uuid.UUID(quote_id),
+        option_groups=option_groups,
+        current_total=quote.total,
+        base_total=base_subtotal
+    )
+
+
+@app.post("/quotes/{quote_id}/options", response_model=schemas.UpdateQuoteOptionsResponse)
+async def update_quote_options(
+    quote_id: str,
+    update_request: schemas.UpdateQuoteOptionsRequest,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update selected options for a quote and recalculate totals.
+    
+    Multi-tenant security: Only allows updates to quotes belonging to the user's company.
+    
+    Example:
+    ```bash
+    curl -X POST "http://localhost:8000/quotes/123e4567-e89b-12d3-a456-426614174000/options" \
+         -H "Authorization: Bearer <token>" \
+         -H "Content-Type: application/json" \
+         -d '{
+           "selected_items": ["item-uuid-1", "item-uuid-2"],
+           "deselected_items": ["item-uuid-3"]
+         }'
+    ```
+    
+    Response includes:
+    - success: Whether the update was successful
+    - new_total: Updated quote total
+    - message: Status message
+    - updated_items: Updated items with selection status
+    """
+    # Get companies for the user
+    companies = crud.get_companies_by_tenant(db, current_user.tenant_id)
+    if not companies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No company found for user"
+        )
+    
+    company_id = companies[0].id
+    
+    try:
+        # Update quote options
+        result = crud.update_quote_options(
+            db, 
+            uuid.UUID(quote_id), 
+            company_id, 
+            [uuid.UUID(item_id) for item_id in update_request.selected_items]
+        )
+        
+        # Get updated items for response
+        updated_items = []
+        for item_id in update_request.selected_items:
+            item = db.query(models.QuoteItem).filter(
+                models.QuoteItem.id == uuid.UUID(item_id),
+                models.QuoteItem.quote_id == uuid.UUID(quote_id)
+            ).first()
+            
+            if item:
+                updated_items.append(schemas.OptionGroupItem(
+                    id=item.id,
+                    kind=item.kind,
+                    ref=item.ref,
+                    description=item.description or "",
+                    qty=item.qty,
+                    unit=item.unit or "",
+                    unit_price=item.unit_price,
+                    line_total=item.line_total,
+                    is_optional=item.is_optional,
+                    option_group=item.option_group or "",
+                    is_selected=True
+                ))
+        
+        return schemas.UpdateQuoteOptionsResponse(
+            success=True,
+            new_total=result["new_total"],
+            message=f"Quote options updated successfully. New total: {result['new_total']:.2f} SEK",
+            updated_items=updated_items
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update quote options: {str(e)}"
+        )

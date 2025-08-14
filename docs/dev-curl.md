@@ -100,6 +100,193 @@ curl -X POST "http://localhost:8000/quotes/autogenerate" \
 }
 ```
 
+## 🎛️ **3. Hantera Dynamiska Tillval (Option Groups)**
+
+### **3.1 Skapa offert med tillval**
+
+```bash
+# Skapa offert med tillval
+curl -X POST "http://localhost:8000/quotes" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_name": "Testkund AB",
+    "project_name": "Badrum med tillval",
+    "profile_id": "'$PROFILE_ID'",
+    "currency": "SEK",
+    "vat_rate": 25.0,
+    "items": [
+      {
+        "kind": "labor",
+        "description": "Grundläggande snickeri",
+        "qty": 20.0,
+        "unit": "hour",
+        "unit_price": 650.0,
+        "is_optional": false
+      },
+      {
+        "kind": "material",
+        "description": "Standard kakel",
+        "qty": 15.0,
+        "unit": "m2",
+        "unit_price": 216.0,
+        "is_optional": false
+      },
+      {
+        "kind": "labor",
+        "description": "Extra detaljarbete",
+        "qty": 8.0,
+        "unit": "hour",
+        "unit_price": 750.0,
+        "is_optional": true,
+        "option_group": "extra_features"
+      },
+      {
+        "kind": "material",
+        "description": "Premium kakel",
+        "qty": 15.0,
+        "unit": "m2",
+        "unit_price": 350.0,
+        "is_optional": true,
+        "option_group": "materials"
+      },
+      {
+        "kind": "material",
+        "description": "Standard kakel",
+        "qty": 15.0,
+        "unit": "m2",
+        "unit_price": 216.0,
+        "is_optional": true,
+        "option_group": "materials"
+      }
+    ]
+  }'
+
+# Spara offert ID
+QUOTE_ID="789e0123-e89b-12d3-a456-426614174000"  # Ersätt med faktiskt ID
+```
+
+### **3.2 Hämta tillval för offert**
+
+```bash
+# Hämta alla tillval grupperade per kategori
+curl -X GET "http://localhost:8000/quotes/$QUOTE_ID/options" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Förväntat svar:**
+```json
+{
+  "quote_id": "789e0123-e89b-12d3-a456-426614174000",
+  "option_groups": [
+    {
+      "name": "extra_features",
+      "title": "Extra funktioner",
+      "description": "Lägg till extra funktioner och förbättringar",
+      "type": "multiple",
+      "items": [
+        {
+          "id": "item-uuid-1",
+          "kind": "labor",
+          "description": "Extra detaljarbete",
+          "qty": 8.0,
+          "unit": "hour",
+          "unit_price": 750.0,
+          "line_total": 6000.0,
+          "is_optional": true,
+          "option_group": "extra_features",
+          "is_selected": true
+        }
+      ],
+      "selected_items": ["item-uuid-1"]
+    },
+    {
+      "name": "materials",
+      "title": "Materialval",
+      "description": "Välj materialkvalitet och typ",
+      "type": "single",
+      "items": [
+        {
+          "id": "item-uuid-2",
+          "kind": "material",
+          "description": "Premium kakel",
+          "qty": 15.0,
+          "unit": "m2",
+          "unit_price": 350.0,
+          "line_total": 5250.0,
+          "is_optional": true,
+          "option_group": "materials",
+          "is_selected": true
+        },
+        {
+          "id": "item-uuid-3",
+          "kind": "material",
+          "description": "Standard kakel",
+          "qty": 15.0,
+          "unit": "m2",
+          "unit_price": 216.0,
+          "line_total": 3240.0,
+          "is_optional": true,
+          "option_group": "materials",
+          "is_selected": false
+        }
+      ],
+      "selected_items": ["item-uuid-2"]
+    }
+  ],
+  "current_total": 45609.5,
+  "base_total": 34350.0
+}
+```
+
+### **3.3 Uppdatera valda tillval**
+
+```bash
+# Välj premium kakel istället för standard
+curl -X POST "http://localhost:8000/quotes/$QUOTE_ID/options" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "selected_items": ["item-uuid-1", "item-uuid-2"],
+    "deselected_items": ["item-uuid-3"]
+  }'
+```
+
+**Förväntat svar:**
+```json
+{
+  "success": true,
+  "new_total": 45609.5,
+  "message": "Quote options updated successfully. New total: 45609.50 SEK",
+  "updated_items": [
+    {
+      "id": "item-uuid-1",
+      "kind": "labor",
+      "description": "Extra detaljarbete",
+      "qty": 8.0,
+      "unit": "hour",
+      "unit_price": 750.0,
+      "line_total": 6000.0,
+      "is_optional": true,
+      "option_group": "extra_features",
+      "is_selected": true
+    },
+    {
+      "id": "item-uuid-2",
+      "kind": "material",
+      "description": "Premium kakel",
+      "qty": 15.0,
+      "unit": "m2",
+      "unit_price": 350.0,
+      "line_total": 5250.0,
+      "is_optional": true,
+      "option_group": "materials",
+      "is_selected": true
+    }
+  ]
+}
+```
+
 ## ✏️ **3. Ändra Qty och Spara Quote med sourceItems**
 
 Skapa en offert med de auto-genererade items som sourceItems:
