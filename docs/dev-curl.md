@@ -306,6 +306,69 @@ curl -X POST "http://localhost:8000/quotes/$QUOTE_ID/pdf" \
 - **Summering** baserad på valen
 - **Totals** som matchar kundvyn exakt
 
+### **3.5 Hämta tillval-historik (Intern vy)**
+
+```bash
+# Hämta komplett historik över tillval-ändringar
+curl -X GET "http://localhost:8000/quotes/$QUOTE_ID/options-history" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Förväntat svar:**
+```json
+[
+  {
+    "id": "event-uuid-1",
+    "quote_id": "789e0123-e89b-12d3-a456-426614174000",
+    "type": "option_updated",
+    "created_at": "2025-08-14T20:30:00",
+    "meta": {
+      "selected_item_count": 2,
+      "total_items": 5,
+      "previous_total": 34350.0,
+      "new_total": 45609.5,
+      "total_difference": 11259.5,
+      "selected_item_ids": ["item-uuid-1", "item-uuid-2"],
+      "base_subtotal": 34350.0,
+      "optional_subtotal": 11259.5,
+      "added": ["item-uuid-1", "item-uuid-2"],
+      "removed": [],
+      "previous_selected_count": 0
+    }
+  },
+  {
+    "id": "event-uuid-2",
+    "quote_id": "789e0123-e89b-12d3-a456-426614174000",
+    "type": "option_finalized",
+    "created_at": "2025-08-14T21:15:00",
+    "meta": {
+      "finalized_at": "2025-08-14T21:15:00",
+      "package_id": "package-uuid-1",
+      "package_name": "Premium",
+      "final_selected_item_ids": ["item-uuid-1", "item-uuid-2"],
+      "final_selected_count": 2,
+      "total_optional_items": 3,
+      "base_subtotal": 34350.0,
+      "optional_subtotal": 11259.5,
+      "total_subtotal": 45609.5,
+      "vat_amount": 11402.38,
+      "final_total": 57011.88,
+      "final_currency": "SEK"
+    }
+  }
+]
+```
+
+**Event-typer:**
+- **`option_updated`** - När kunden ändrar tillval
+  - `added`: Nya valda tillval
+  - `removed`: Borttagna tillval
+  - `total_difference`: Skillnad i totalsumma
+- **`option_finalized`** - När kunden accepterar offerten
+  - `final_selected_item_ids`: Slutliga valda tillval
+  - `final_total`: Slutlig totalsumma
+  - `package_name`: Vald paket
+
 ## ✏️ **3. Ändra Qty och Spara Quote med sourceItems**
 
 Skapa en offert med de auto-genererade items som sourceItems:

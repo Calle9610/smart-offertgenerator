@@ -1434,6 +1434,69 @@ async def accept_public_quote(
         except Exception as e:
             print(f"Warning: Could not create accepted event: {e}")
             # Don't fail the request if event creation fails
+        
+        # Create option_finalized event with final selection
+        try:
+            # Get current selected options from the accept request
+            selected_item_ids = getattr(accept_request, 'selectedItemIds', [])
+            
+            # Get quote items to calculate final totals
+            quote_items = db.query(QuoteItem).filter(
+                QuoteItem.quote_id == quote.id
+            ).all()
+            
+            if quote_items:
+                # Calculate final totals based on selected options
+                mandatory_items = [item for item in quote_items if not item.is_optional]
+                optional_items = [item for item in quote_items if item.is_optional]
+                
+                base_subtotal = sum(item.line_total for item in mandatory_items)
+                selected_optional_items = [
+                    item for item in optional_items 
+                    if str(item.id) in selected_item_ids
+                ]
+                optional_subtotal = sum(item.line_total for item in selected_optional_items)
+                total_subtotal = base_subtotal + optional_subtotal
+                
+                # Get VAT rate from quote profile
+                profile = db.query(PriceProfile).filter(
+                    PriceProfile.id == quote.profile_id
+                ).first()
+                
+                vat_rate = float(profile.vat_rate) / 100.0 if profile else 0.25
+                vat_amount = total_subtotal * Decimal(str(vat_rate))
+                total_amount = total_subtotal + vat_amount
+                
+                option_finalized_event = crud.create_quote_event(
+                    db,
+                    schemas.QuoteEventCreate(
+                        quote_id=quote.id,
+                        type="option_finalized",
+                        meta={
+                            "ip": "unknown",
+                            "user_agent": "unknown",
+                            "finalized_at": datetime.now().isoformat(),
+                            "package_id": str(accept_request.packageId),
+                            "package_name": package_name,
+                            "final_selected_item_ids": selected_item_ids,
+                            "final_selected_count": len(selected_item_ids),
+                            "total_optional_items": len(optional_items),
+                            "base_subtotal": float(base_subtotal),
+                            "optional_subtotal": float(optional_subtotal),
+                            "total_subtotal": float(total_subtotal),
+                            "vat_amount": float(vat_amount),
+                            "final_total": float(total_amount),
+                            "final_currency": quote.currency
+                        },
+                    ),
+                )
+                print(f"✅ Quote option finalized event created: {option_finalized_event.id}")
+            else:
+                print("Warning: No quote items found for option_finalized event")
+                
+        except Exception as e:
+            print(f"Warning: Could not create option_finalized event: {e}")
+            # Don't fail the request if event creation fails
 
         print(f"🎉 Quote {quote.id} accepted with package {package_name}! Status: {quote.status}")
 
@@ -1451,6 +1514,59 @@ async def accept_public_quote(
         print(f"Error accepting quote: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Failed to accept quote")
+
+
+# Get options history for a quote (internal view)
+@app.get("/quotes/{quote_id}/options-history", response_model=List[schemas.QuoteEventOut])
+async def get_quote_options_history(
+    quote_id: str,
+    current_user: User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get options history for a quote (internal view, requires authentication).
+    
+    Returns all option-related events (option_updated, option_finalized) for a quote,
+    showing the complete history of option selections and changes.
+    
+    Multi-tenant security: Only returns data for quotes belonging to the user's company.
+    
+    Example:
+    ```bash
+    curl -X GET "http://localhost:8000/quotes/123e4567-e89b-12d3-a456-426614174000/options-history" \
+         -H "Authorization: Bearer <token>"
+    ```
+    
+    Response includes:
+    - option_updated events with added/removed items
+    - option_finalized events with final selection
+    - Complete timeline of option changes
+    """
+    try:
+        # Get quote with tenant validation
+        quote = crud.get_quote_by_id_and_tenant(
+            db, uuid.UUID(quote_id), current_user.tenant_id
+        )
+        if not quote:
+            raise HTTPException(status_code=404, detail="Quote not found")
+        
+        # Get all option-related events for this quote
+        option_events = db.query(models.QuoteEvent).filter(
+            models.QuoteEvent.quote_id == uuid.UUID(quote_id),
+            models.QuoteEvent.type.in_(["option_updated", "option_finalized"])
+        ).order_by(models.QuoteEvent.created_at.asc()).all()
+        
+        return option_events
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting options history: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get options history: {str(e)}"
+        )
 
 
 # Decline quote endpoint (no authentication required)
@@ -2491,7 +2607,21 @@ async def update_public_quote_selection(
             previous_total = quote.total
             total_difference = new_total - previous_total
             
-            # Get previous selection state (this would need to be tracked, but for now we'll log the change)
+            # Get previous selection state from quote events
+            previous_event = db.query(models.QuoteEvent).filter(
+                models.QuoteEvent.quote_id == quote.id,
+                models.QuoteEvent.type == "option_updated"
+            ).order_by(models.QuoteEvent.created_at.desc()).first()
+            
+            # Calculate added and removed items
+            previous_selected_ids = set()
+            if previous_event and "selected_item_ids" in previous_event.meta:
+                previous_selected_ids = set(previous_event.meta["selected_item_ids"])
+            
+            current_selected_ids = set(selected_ids)
+            added_items = list(current_selected_ids - previous_selected_ids)
+            removed_items = list(previous_selected_ids - current_selected_ids)
+            
             event_meta = {
                 "ip": "unknown",  # Could extract from request if needed
                 "user_agent": "unknown",  # Could extract from request if needed
@@ -2503,7 +2633,10 @@ async def update_public_quote_selection(
                 "total_difference": float(total_difference),
                 "selected_item_ids": list(selected_ids),
                 "base_subtotal": float(base_subtotal),
-                "optional_subtotal": float(optional_subtotal)
+                "optional_subtotal": float(optional_subtotal),
+                "added": added_items,
+                "removed": removed_items,
+                "previous_selected_count": len(previous_selected_ids)
             }
             
             event = crud.create_quote_event(
