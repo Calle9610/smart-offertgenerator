@@ -5,6 +5,25 @@ import * as SelectPrimitive from '@radix-ui/react-select'
 import { Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+/*
+ * A11Y CHECKLIST - Select Component (Radix UI)
+ * ✅ role="combobox" - Automatisk från Radix UI
+ * ✅ aria-expanded - Automatisk från Radix UI
+ * ✅ aria-autocomplete - Automatisk från Radix UI
+ * ✅ aria-haspopup - Automatisk från Radix UI
+ * ✅ aria-labelledby - Automatisk från Radix UI
+ * ✅ Focus states - focus:ring-2 focus:ring-ring
+ * ✅ Keyboard navigation - Arrow keys, Enter, Escape
+ * ✅ Focus trap i dropdown - Automatisk från Radix UI
+ * 
+ * MANUELL TESTNING:
+ * 1. TAB till select - ska ha synlig fokusring
+ * 2. Enter/Space - ska öppna dropdown
+ * 3. Arrow keys - ska navigera i listan
+ * 4. Escape - ska stänga dropdown
+ * 5. Focus trap - ska inte kunna TAB utanför dropdown
+ */
+
 const Select = SelectPrimitive.Root
 
 const SelectGroup = SelectPrimitive.Group
@@ -18,14 +37,14 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'input-base flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      'input-base flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 transition-all duration-150 ease-out hover:border-ring',
       className
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
+      <ChevronDown className="h-4 w-4 opacity-50 transition-transform duration-150 ease-out" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))

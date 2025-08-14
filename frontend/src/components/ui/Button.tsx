@@ -3,21 +3,39 @@ import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
+/*
+ * A11Y CHECKLIST - Button Component
+ * ✅ Semantisk HTML - button-element eller Slot
+ * ✅ aria-hidden="true" på ikoner - Döljer dekorativa element
+ * ✅ Loading state - aria-hidden på spinner
+ * ✅ Disabled state - disabled attribut
+ * ✅ Focus states - focus-visible:ring-* för alla varianter
+ * ✅ Hover states - hover:bg-* för alla varianter
+ * ✅ Keyboard support - Enter/Space för aktivering
+ * 
+ * MANUELL TESTNING:
+ * 1. TAB till knapp - ska ha synlig fokusring
+ * 2. Enter/Space - ska aktivera knapp
+ * 3. Loading state - ska visa spinner + disabled
+ * 4. Hover states - ska vara synliga
+ * 5. Focus ring - ska matcha knappens färgschema
+ */
+
 const buttonVariants = cva(
-  'btn-base',
+  'btn-base transition-all duration-150 ease-out',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-        outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-md',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 hover:shadow-md',
+        outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground hover:shadow-sm',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:shadow-sm',
+        ghost: 'hover:bg-accent hover:text-accent-foreground hover:shadow-sm',
         link: 'text-primary underline-offset-4 hover:underline',
-        brand: 'bg-brand-600 text-white hover:bg-brand-700 focus-visible:ring-brand-500',
-        success: 'bg-success-600 text-white hover:bg-success-700 focus-visible:ring-success-500',
-        warn: 'bg-warn-600 text-white hover:bg-warn-700 focus-visible:ring-warn-500',
-        error: 'bg-error-600 text-white hover:bg-error-700 focus-visible:ring-error-500',
+        brand: 'bg-brand-600 text-white hover:bg-brand-700 hover:shadow-md focus-visible:ring-brand-500',
+        success: 'bg-success-600 text-white hover:bg-success-700 hover:shadow-md focus-visible:ring-success-500',
+        warn: 'bg-warn-600 text-white hover:bg-warn-700 hover:shadow-md focus-visible:ring-warn-500',
+        error: 'bg-error-600 text-white hover:bg-error-700 hover:shadow-md focus-visible:ring-error-500',
       },
       size: {
         default: 'h-10 px-4 py-2',

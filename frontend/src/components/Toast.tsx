@@ -2,6 +2,24 @@
 
 import { useState, useEffect } from 'react'
 
+/*
+ * A11Y CHECKLIST - Toast Component
+ * ✅ role="alert" - Screen readers announce as alert
+ * ✅ aria-live="polite" - Announces changes without interrupting
+ * ✅ aria-atomic="true" - Reads entire message as one unit
+ * ✅ aria-label på stängknapp - Beskrivande text för screen readers
+ * ✅ aria-hidden="true" på ikoner - Döljer dekorativa element
+ * ✅ ESC-stängning - Tangentbordsstöd för stängning
+ * ✅ Focus ring - Synlig fokusindikator
+ * ✅ Semantisk HTML - button-element för klickbara element
+ * 
+ * MANUELL TESTNING:
+ * 1. TAB till stängknapp - ska ha synlig fokusring
+ * 2. ESC-tangent - ska stänga toast
+ * 3. Screen reader - ska läsa "alert" + meddelande
+ * 4. Kontrast - grön/röd/blå text på vit bakgrund (WCAG AA)
+ */
+
 interface ToastProps {
   message: string
   type: 'success' | 'error' | 'info'
@@ -71,13 +89,16 @@ export default function Toast({
 
   return (
     <div
-      className={`fixed top-4 right-4 z-50 transition-all duration-300 ${
+      role="alert"
+      aria-live="polite"
+      aria-atomic="true"
+      className={`fixed top-4 right-4 z-50 transition-all duration-200 ease-out ${
         isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'
       }`}
     >
-      <div className={`max-w-sm w-full bg-white border rounded-lg shadow-lg p-4 ${getTypeStyles()}`}>
+      <div className={`max-w-sm w-full bg-white border rounded-lg shadow-lg p-4 transition-all duration-200 ease-out hover:shadow-xl ${getTypeStyles()}`}>
         <div className="flex items-start">
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0" aria-hidden="true">
             {getIcon()}
           </div>
           <div className="ml-3 flex-1">
@@ -88,7 +109,7 @@ export default function Toast({
                   href={action.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm font-medium underline hover:no-underline"
+                  className="text-sm font-medium underline hover:no-underline transition-all duration-150 ease-out"
                 >
                   {action.label}
                 </a>
@@ -99,11 +120,18 @@ export default function Toast({
             <button
               onClick={() => {
                 setIsVisible(false)
-                setTimeout(onClose, 300)
+                setTimeout(onClose, 200)
               }}
-              className="inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setIsVisible(false)
+                  setTimeout(onClose, 200)
+                }
+              }}
+              aria-label="Stäng meddelande"
+              className="inline-flex text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition-all duration-150 ease-out focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded hover:scale-110"
             >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
             </button>

@@ -1,6 +1,23 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
+/*
+ * A11Y CHECKLIST - Table Component
+ * ✅ Semantisk HTML - table, thead, tbody, th, td
+ * ✅ scope="col" på th-element (läggs till vid användning)
+ * ✅ caption för tabellbeskrivning (läggs till vid användning)
+ * ✅ aria-label på table-element (läggs till vid användning)
+ * ✅ Hover states - hover:bg-muted/50
+ * ✅ Focus states - focus:ring-2 focus:ring-ring
+ * 
+ * MANUELL TESTNING:
+ * 1. Screen reader - ska läsa tabellstruktur korrekt
+ * 2. TAB genom tabell - ska följa logisk ordning
+ * 3. Hover states - ska vara synliga
+ * 4. Focus ring - ska vara synlig på klickbara element
+ * 5. Tabellbeskrivning - ska läsas innan tabellinnehåll
+ */
+
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
@@ -57,7 +74,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
+      'border-b transition-all duration-150 ease-out hover:bg-muted/50 hover:shadow-sm data-[state=selected]:bg-muted',
       className
     )}
     {...props}

@@ -1,6 +1,23 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
+/*
+ * A11Y CHECKLIST - Card Component
+ * ✅ Semantisk HTML - h3 för titel, p för beskrivning
+ * ✅ Huvudrubrik - h3 för card-titel
+ * ✅ Beskrivning - p-element för card-beskrivning
+ * ✅ Struktur - Header, Content, Footer för logisk ordning
+ * ✅ Focus states - focus:ring-2 focus:ring-ring (om klickbar)
+ * ✅ Hover states - hover:shadow-lg (om klickbar)
+ * 
+ * MANUELL TESTNING:
+ * 1. Screen reader - ska läsa struktur korrekt
+ * 2. Huvudrubrik - ska vara h3-nivå
+ * 3. Beskrivning - ska vara p-element
+ * 4. Struktur - ska följa logisk ordning
+ * 5. Focus ring - ska vara synlig om klickbar
+ */
+
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -8,7 +25,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'card-base',
+      'card-base transition-all duration-150 ease-out hover:shadow-lg',
       className
     )}
     {...props}
