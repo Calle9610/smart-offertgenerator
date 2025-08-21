@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AlertTriangle, X, RefreshCw, Info } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -26,21 +26,43 @@ const ErrorToast: React.FC<ErrorToastProps> = ({
   showRetry = false
 }) => {
   const [isVisible, setIsVisible] = useState(true)
+  const dismissTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (duration > 0) {
       const timer = setTimeout(() => {
         setIsVisible(false)
-        setTimeout(() => onDismiss?.(id), 300) // Wait for animation
+        // Clear any existing dismiss timer
+        if (dismissTimerRef.current) {
+          clearTimeout(dismissTimerRef.current)
+        }
+        // Set new dismiss timer
+        dismissTimerRef.current = setTimeout(() => onDismiss?.(id), 300)
       }, duration)
-      return () => clearTimeout(timer)
+      return () => {
+        clearTimeout(timer)
+        // Clear dismiss timer on cleanup
+        if (dismissTimerRef.current) {
+          clearTimeout(dismissTimerRef.current)
+        }
+      }
     }
-    return undefined
+    return () => {
+      // Clear dismiss timer on cleanup
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current)
+      }
+    }
   }, [duration, id, onDismiss])
 
   const handleDismiss = () => {
     setIsVisible(false)
-    setTimeout(() => onDismiss?.(id), 300)
+    // Clear any existing timer
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current)
+    }
+    // Set new timer and store reference
+    dismissTimerRef.current = setTimeout(() => onDismiss?.(id), 300)
   }
 
   const handleRetry = () => {

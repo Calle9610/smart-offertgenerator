@@ -96,6 +96,12 @@ export function ErrorState({
         description: finalDescription
       })
     }
+    
+    // Cleanup function to prevent memory leaks
+    return () => {
+      // Cleanup any pending operations if needed
+      // Currently no async operations to clean up
+    }
   }, [error, shouldLogToSentry, variant, finalTitle, finalDescription])
 
   return (
