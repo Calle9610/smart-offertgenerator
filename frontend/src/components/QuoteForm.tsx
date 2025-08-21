@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createQuote } from '@/app/api'
+import { post } from '@/lib/apiClient'
 import { CreateQuoteRequest, CreateQuoteRequestSchema } from '@/types/quote'
 import { sanitizeFormInput } from '@/lib/sanitization'
 
@@ -118,18 +118,17 @@ export default function QuoteForm({
       return
     }
     
-    // Create mode - original logic
+    // Create mode - use apiClient
     setLoading(true)
     
     try {
-      // Call API to create quote
-      console.debug('🔍 QuoteForm: Calling createQuote API...')
-      const response = await createQuote(formData)
+      // Call API to create quote using apiClient
+      console.debug('🔍 QuoteForm: Calling createQuote API via apiClient...')
+      const response = await post('/api/quotes', formData)
       
-      console.debug('🔍 QuoteForm: API response status:', response)
-      console.debug('🔍 QuoteForm: API response body:', response)
+      console.debug('🔍 QuoteForm: API response:', response)
       
-      // Extract quote ID from normalized response
+      // Extract quote ID from response
       const quoteId = response.id
       console.debug('🔍 QuoteForm: Extracted quoteId:', quoteId)
       
@@ -145,10 +144,10 @@ export default function QuoteForm({
       // Navigate to the edit page
       router.push(path)
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ QuoteForm: Error creating quote:', error)
       // Show validation error instead of alert
-      setValidationErrors({ submit: `Kunde inte skapa offert: ${error}` })
+      setValidationErrors({ submit: `Kunde inte skapa offert: ${error.message || error}` })
     } finally {
       setLoading(false)
     }
