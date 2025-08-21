@@ -49,6 +49,12 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({
     if (newCompleted.size + newFailed.size === steps.length) {
       onComplete?.()
     }
+    
+    // Cleanup function to prevent memory leaks
+    return () => {
+      // Cleanup any pending operations if needed
+      // Currently no async operations to clean up
+    }
   }, [steps, onComplete])
 
   const getStepIcon = (step: ProgressStep) => {
