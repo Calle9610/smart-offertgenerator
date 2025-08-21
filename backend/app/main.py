@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Import CSRF protection
 from .csrf import get_csrf_token
 from .middleware import CSRFMiddleware, SecurityHeadersMiddleware
+from .rate_limiting import apply_rate_limits, rate_limit_10_per_minute
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 # from .pdf_generator import pdf_generator  # Temporarily disabled for testing
@@ -60,6 +61,9 @@ app.add_middleware(CSRFMiddleware)
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
 
+# Apply rate limiting
+apply_rate_limits(app)
+
 # Jinja2 template setup
 template_loader = jinja2.FileSystemLoader(searchpath="./templates")
 template_env = jinja2.Environment(loader=template_loader, autoescape=True)
@@ -87,6 +91,7 @@ async def startup_event():
 
 async def seed_initial_data():
     """Seed initial tenant, user, company, and price profile."""
+    from .db import SessionLocal
     db = SessionLocal()
     try:
         # Check if we already have data
@@ -142,16 +147,19 @@ async def seed_initial_data():
 
 
 @app.get("/")
+@rate_limit_10_per_minute
 def root():
     return {"ok": True, "message": "Smart Offertgenerator API"}
 
 
 @app.get("/health")
+@rate_limit_10_per_minute
 def health_check():
     return {"status": "healthy", "timestamp": "2025-08-12T18:00:00Z"}
 
 
 @app.get("/healthz")
+@rate_limit_10_per_minute
 def healthz_check():
     """
     Liveness check endpoint for Kubernetes health probes.
@@ -175,6 +183,7 @@ def healthz_check():
 
 
 @app.get("/readiness")
+@rate_limit_10_per_minute
 def readiness_check(db: Session = Depends(get_db)):
     """
     Readiness check endpoint that verifies database connectivity.
@@ -389,6 +398,7 @@ async def create_user(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
         )
 
+    from .db import SessionLocal
     db = SessionLocal()
     try:
         # Check if username or email already exists
