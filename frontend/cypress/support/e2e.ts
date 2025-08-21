@@ -16,6 +16,9 @@
 // Import commands.js using ES2015 syntax:
 import './commands'
 
+// Import Cypress types
+/// <reference types="cypress" />
+
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
 
@@ -41,7 +44,7 @@ declare global {
       
       /**
        * Custom command to wait for API response.
-       * @example cy.waitForApi('POST', '/api/public/quotes/*/update-selection')
+       * @example cy.waitForApi('POST', '/api/public/quotes/:id/update-selection')
        */
       waitForApi(method: string, url: string): Chainable<JQuery<HTMLElement>>
       

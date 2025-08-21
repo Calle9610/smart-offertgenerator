@@ -131,7 +131,9 @@ export async function calcQuote(payload: any) {
   return res.json();
 }
 
-export async function createQuote(payload: any) {
+import { CreateQuoteRequest, CreateQuoteResponse } from '@/types/quote'
+
+export async function createQuote(payload: CreateQuoteRequest): Promise<CreateQuoteResponse> {
   const token = localStorage.getItem('token')
   
   if (!token) {
@@ -164,7 +166,9 @@ export async function createQuote(payload: any) {
   return responseData;
 }
 
-export async function getQuotes(token: string) {
+import { QuoteDto } from '@/types/quote'
+
+export async function getQuotes(token: string): Promise<QuoteDto[]> {
   const res = await fetch(`${API_BASE}/api/quotes`, {
     headers: {
       'Authorization': `Bearer ${token}`
@@ -174,6 +178,17 @@ export async function getQuotes(token: string) {
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`Failed to get quotes: ${errorText}`);
+  }
+  
+  return res.json();
+}
+
+export async function getQuote(id: string): Promise<QuoteDto> {
+  const res = await fetch(`${API_BASE}/api/quotes/${id}`);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to get quote: ${errorText}`);
   }
   
   return res.json();

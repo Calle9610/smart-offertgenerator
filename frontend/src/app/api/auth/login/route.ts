@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
     const body = await request.formData()
     
     // Proxy request to backend
-    const backendResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/token`, {
+    const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/token`, {
       method: 'POST',
       body: body
     })

@@ -6,7 +6,6 @@ import { motion } from 'framer-motion'
 import { 
   Plus, 
   Search, 
-  Filter, 
   Mail, 
   Phone, 
   MapPin, 
@@ -22,9 +21,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/Badge'
 import { 
   usePromiseState, 
-  CardSkeleton, 
-  CustomersEmptyState, 
-  ServerErrorState 
+  LoadingSkeleton, 
+  ErrorState
 } from '@/components/system'
 
 // Mock data - ersätt med riktig API-anrop
@@ -133,6 +131,15 @@ export default function CustomersPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   
+  // Loading states för actions
+  const [loadingStates, setLoadingStates] = useState<{
+    contact: { [key: string]: boolean }
+    meeting: { [key: string]: boolean }
+  }>({
+    contact: {},
+    meeting: {}
+  })
+  
   // Use the new promise state hook
   const customersState = usePromiseState(mockCustomers)
   
@@ -163,14 +170,54 @@ export default function CustomersPage() {
     router.push('/customers/new')
   }
 
-  const handleContactCustomer = (customer: any) => {
-    // TODO: Implementera kontakt
-    console.log('Contacting customer:', customer.name)
+  const handleContactCustomer = async (customer: any) => {
+    // Sätt loading state för denna kund
+    setLoadingStates(prev => ({
+      ...prev,
+      contact: { ...prev.contact, [customer.id]: true }
+    }))
+    
+    try {
+      // TODO: Implementera kontakt
+      await new Promise(resolve => setTimeout(resolve, 1500)) // Simulera API-anrop
+      console.log('Contacting customer:', customer.name)
+      
+      // Här skulle vi kunna öppna en kontaktmodal eller skicka e-post
+      
+    } catch (error) {
+      console.error('Failed to contact customer:', error)
+    } finally {
+      // Rensa loading state
+      setLoadingStates(prev => ({
+        ...prev,
+        contact: { ...prev.contact, [customer.id]: false }
+      }))
+    }
   }
 
-  const handleScheduleMeeting = (customer: any) => {
-    // TODO: Implementera mötesbokning
-    console.log('Scheduling meeting with:', customer.name)
+  const handleScheduleMeeting = async (customer: any) => {
+    // Sätt loading state för denna kund
+    setLoadingStates(prev => ({
+      ...prev,
+      meeting: { ...prev.meeting, [customer.id]: true }
+    }))
+    
+    try {
+      // TODO: Implementera mötesbokning
+      await new Promise(resolve => setTimeout(resolve, 1500)) // Simulera API-anrop
+      console.log('Scheduling meeting with:', customer.name)
+      
+      // Här skulle vi kunna öppna en mötesbokningsmodal
+      
+    } catch (error) {
+      console.error('Failed to schedule meeting:', error)
+    } finally {
+      // Rensa loading state
+      setLoadingStates(prev => ({
+        ...prev,
+        meeting: { ...prev.meeting, [customer.id]: false }
+      }))
+    }
   }
 
   const handleRetry = () => {
@@ -188,7 +235,7 @@ export default function CustomersPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
-            <CardSkeleton key={i} />
+            <LoadingSkeleton key={i} />
           ))}
         </div>
       </div>
@@ -198,26 +245,18 @@ export default function CustomersPage() {
   // Error state
   if (customersState.isError) {
     return (
-      <ServerErrorState
+      <ErrorState
         error={customersState.error}
-        onRetry={handleRetry}
-        onContactSupport={() => console.log('Contact support')}
+        retry={{
+          onClick: handleRetry,
+          label: 'Försök igen'
+        }}
       />
     )
   }
 
   // Empty state
   if (!customersState.data || customersState.data.length === 0) {
-    return (
-      <CustomersEmptyState
-        onAddCustomer={handleAddCustomer}
-        onImportCustomers={() => console.log('Import customers')}
-      />
-    )
-  }
-
-  // Success state with filtered results
-  if (filteredCustomers.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="mx-auto h-16 w-16 text-gray-400 mb-4">
@@ -346,10 +385,10 @@ export default function CustomersPage() {
                     <Building2 className="h-6 w-6" />
                   </div>
                   <Badge 
-                    variant={statusConfig[customer.status].variant}
+                    variant={statusConfig[customer.status as keyof typeof statusConfig]?.variant || 'secondary'}
                     size="sm"
                   >
-                    {statusConfig[customer.status].label}
+                    {statusConfig[customer.status as keyof typeof statusConfig]?.label || customer.status}
                   </Badge>
                 </div>
                 <CardTitle className="text-lg">{customer.name}</CardTitle>
@@ -395,18 +434,38 @@ export default function CustomersPage() {
                     size="sm" 
                     className="flex-1"
                     onClick={() => handleContactCustomer(customer)}
+                    disabled={loadingStates.contact[customer.id] || false}
                   >
-                    <Mail className="h-4 w-4 mr-2" />
-                    Kontakta
+                    {loadingStates.contact[customer.id] ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
+                        Väntar...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Kontakta
+                      </>
+                    )}
                   </Button>
                   <Button 
                     variant="outline" 
                     size="sm" 
                     className="flex-1"
                     onClick={() => handleScheduleMeeting(customer)}
+                    disabled={loadingStates.meeting[customer.id] || false}
                   >
-                    <Calendar className="h-4 w-4 mr-2" />
-                    Möte
+                    {loadingStates.meeting[customer.id] ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
+                        Väntar...
+                      </>
+                    ) : (
+                      <>
+                        <Calendar className="h-4 w-4 mr-2" />
+                        Möte
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>

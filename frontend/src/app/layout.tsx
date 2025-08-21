@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import { AppShell } from '@/components/AppShell'
+import { ErrorBoundary, ErrorToastManager, SuccessToastManager } from '@/components/system'
 
 export const metadata: Metadata = { 
   title: 'Smart Offertgenerator',
@@ -12,9 +13,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="sv" suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
-        <AppShell>
-          {children}
-        </AppShell>
+        <ErrorBoundary>
+          <AppShell>
+            {children}
+          </AppShell>
+          <ErrorToastManager position="top-right" maxToasts={3} />
+          <SuccessToastManager position="bottom-right" maxToasts={3} />
+        </ErrorBoundary>
       </body>
     </html>
   )

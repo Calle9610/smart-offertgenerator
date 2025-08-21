@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 })
     }
 
-    const response = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/admin/rules`, {
+    const response = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/admin/rules`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }

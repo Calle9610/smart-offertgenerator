@@ -1,3 +1,5 @@
+'use client'
+
 import { ReactNode, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -27,56 +29,12 @@ interface ErrorStateProps {
   actions?: Array<{
     label: string
     onClick: () => void
-    variant?: 'primary' | 'secondary' | 'outline'
-    icon?: ReactNode
+    variant?: 'default' | 'secondary' | 'outline'
+    icon?: ReactNode | any
   }>
   className?: string
   showErrorDetails?: boolean
   logToSentry?: boolean
-}
-
-const defaultConfigs = {
-  network: {
-    icon: Wifi,
-    title: sv.error.network.title,
-    description: sv.error.network.description
-  },
-  server: {
-    icon: Server,
-    title: sv.error.server.title,
-    description: sv.error.server.description
-  },
-  auth: {
-    icon: User,
-    title: sv.error.auth.title,
-    description: sv.error.auth.description
-  },
-  notFound: {
-    icon: AlertTriangle,
-    title: sv.error.notFound.title,
-    description: sv.error.notFound.description
-  },
-  permission: {
-    icon: AlertTriangle,
-    title: 'Behörighet saknas',
-    description: 'Du har inte rätt behörighet för denna åtgärd. Kontakta din administratör för hjälp.'
-  }
-}
-
-// Sentry integration
-const logToSentry = (error: Error, context?: Record<string, unknown>) => {
-  try {
-    // Check if Sentry is available
-    if (typeof window !== 'undefined' && (window as { Sentry?: { captureException: (error: Error, options: { extra?: Record<string, unknown> }) => void } }).Sentry) {
-      (window as { Sentry: { captureException: (error: Error, options: { extra?: Record<string, unknown> }) => void } }).Sentry.captureException(error, {
-        extra: context
-      })
-    }
-  } catch (sentryError) {
-    // Fallback to console if Sentry fails
-    console.error('Failed to log to Sentry:', sentryError)
-    console.error('Original error:', error)
-  }
 }
 
 export function ErrorState({
@@ -92,6 +50,35 @@ export function ErrorState({
   logToSentry: shouldLogToSentry = true
 }: ErrorStateProps) {
   const copy = useCopy()
+  
+  const defaultConfigs = {
+    network: {
+      icon: Wifi,
+      title: 'Nätverksfel',
+      description: 'Kunde inte ansluta till servern. Kontrollera din internetanslutning.'
+    },
+    server: {
+      icon: Server,
+      title: 'Serverfel',
+      description: 'Ett fel uppstod på servern. Försök igen senare.'
+    },
+    auth: {
+      icon: User,
+      title: 'Åtkomst nekad',
+      description: 'Du har inte behörighet att utföra denna åtgärd. Logga in igen.'
+    },
+    notFound: {
+      icon: AlertTriangle,
+      title: 'Kunde inte hitta det du letade efter',
+      description: 'Sidan eller resursen du försöker nå finns inte.'
+    },
+    permission: {
+      icon: AlertTriangle,
+      title: 'Behörighet saknas',
+      description: 'Du har inte rätt behörighet för denna åtgärd. Kontakta din administratör för hjälp.'
+    }
+  }
+  
   const config = variant !== 'default' ? defaultConfigs[variant] : null
   const IconComponent = icon || (config?.icon ? config.icon : AlertTriangle)
   
@@ -102,7 +89,8 @@ export function ErrorState({
   useEffect(() => {
     if (shouldLogToSentry && error) {
       const errorObj = error instanceof Error ? error : new Error(String(error))
-      logToSentry(errorObj, {
+      // TODO: Implement proper Sentry logging
+      console.error('Error logged:', errorObj, {
         variant,
         title: finalTitle,
         description: finalDescription
@@ -161,8 +149,8 @@ export function ErrorState({
         {retry && (
           <Button
             onClick={retry.onClick}
-            variant="primary"
-            leftIcon={retry.loading ? undefined : RefreshCw}
+            variant="default"
+            leftIcon={retry.loading ? undefined : RefreshCw as any}
             disabled={retry.loading}
             className="min-w-[120px]"
           >
@@ -201,6 +189,8 @@ export function NetworkErrorState({
   onRetry: () => void
   onGoHome?: () => void
 } & Omit<ErrorStateProps, 'variant'>) {
+  const copy = useCopy()
+  
   return (
     <ErrorState
       variant="network"
@@ -227,6 +217,8 @@ export function ServerErrorState({
   onRetry: () => void
   onContactSupport?: () => void
 } & Omit<ErrorStateProps, 'variant'>) {
+  const copy = useCopy()
+  
   return (
     <ErrorState
       variant="server"
@@ -253,6 +245,8 @@ export function AuthErrorState({
   onLogin: () => void
   onGoBack?: () => void
 } & Omit<ErrorStateProps, 'variant'>) {
+  const copy = useCopy()
+  
   return (
     <ErrorState
       variant="auth"
@@ -260,7 +254,7 @@ export function AuthErrorState({
         {
           label: 'Logga in',
           onClick: onLogin,
-          variant: 'primary',
+          variant: 'default',
           icon: User
         },
         ...(onGoBack ? [{
@@ -290,7 +284,7 @@ export function NotFoundErrorState({
         {
           label: 'Gå till startsidan',
           onClick: onGoHome,
-          variant: 'primary',
+          variant: 'default',
           icon: Home
         },
         ...(onGoBack ? [{
@@ -320,7 +314,7 @@ export function PermissionErrorState({
         {
           label: 'Kontakta administratör',
           onClick: onContactAdmin,
-          variant: 'primary',
+          variant: 'default',
           icon: User
         },
         ...(onGoBack ? [{

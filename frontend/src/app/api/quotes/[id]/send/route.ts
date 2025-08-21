@@ -20,7 +20,7 @@ export async function POST(
     const token = authHeader.substring(7)
     
     // Proxy request to backend
-    const backendResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/quotes/${id}/send`, {
+          const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/quotes/${id}/send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

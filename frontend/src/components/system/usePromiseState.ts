@@ -1,5 +1,6 @@
+'use client'
+
 import { useState, useCallback, useRef } from 'react'
-import { useCopy } from '@/copy/useCopy'
 
 export type PromiseState<T> = {
   status: 'idle' | 'loading' | 'success' | 'error'
@@ -55,8 +56,7 @@ export function usePromiseState<T>(initialData: T | null = null): PromiseState<T
       
       // Check if request was cancelled
       if (abortControllerRef.current?.signal.aborted) {
-        const copy = useCopy()
-        throw new Error(copy.errors.requestCancelled)
+        throw new Error('Förfrågan avbröts')
       }
 
       setState(prev => ({
@@ -73,8 +73,7 @@ export function usePromiseState<T>(initialData: T | null = null): PromiseState<T
     } catch (error) {
       // Check if request was cancelled
       if (abortControllerRef.current?.signal.aborted) {
-        const copy = useCopy()
-        throw new Error(copy.errors.requestCancelled)
+        throw new Error('Förfrågan avbröts')
       }
 
       const errorObj = error instanceof Error ? error : new Error(String(error))

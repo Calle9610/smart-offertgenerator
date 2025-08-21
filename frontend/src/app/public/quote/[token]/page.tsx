@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 import { 
   PublicQuote, 
-  PublicQuotePackage, 
   AcceptQuoteRequest, 
   UpdateSelectionRequest,
   UpdateSelectionResponse,
@@ -30,7 +29,7 @@ import { useCopy } from '@/copy/useCopy'
 
 export default function PublicQuotePage() {
   const params = useParams()
-  const token = params.token as string
+  const token = params['token'] as string
   const copy = useCopy()
   
   const [quote, setQuote] = useState<PublicQuote | null>(null)
@@ -199,7 +198,6 @@ export default function PublicQuotePage() {
         throw new Error(errorData.detail || 'Kunde inte acceptera offerten')
       }
 
-      const data = await response.json()
       setAcceptedPackage(packageId)
       setQuote(prev => prev ? { ...prev, accepted_package_id: packageId } : null)
       
@@ -245,9 +243,11 @@ export default function PublicQuotePage() {
           }
         }
         
-        groups[groupName].items.push(item)
-        if (selectedItemIds.includes(item.id)) {
-          groups[groupName].selected_items.push(item.id)
+        if (groups[groupName]) {
+          groups[groupName]!.items.push(item)
+          if (selectedItemIds.includes(item.id)) {
+            groups[groupName]!.selected_items.push(item.id)
+          }
         }
       }
     })
@@ -325,7 +325,7 @@ export default function PublicQuotePage() {
             <div className="text-green-500 text-8xl mb-6">🎉</div>
             <h1 className="text-4xl font-bold text-gray-900 mb-4">Tack för din beställning!</h1>
             <p className="text-xl text-gray-600 mb-8">
-              Du har accepterat offerten för <strong>{quote.project_name}</strong>
+              Du har accepterat offerten för <strong>{quote.project_name || 'projektet'}</strong>
             </p>
             
             <div className="bg-blue-50 rounded-lg p-6 mb-8">

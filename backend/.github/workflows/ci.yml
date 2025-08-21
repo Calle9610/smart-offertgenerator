@@ -1,0 +1,122 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev,test]"
+        
+    - name: Run Ruff linter
+      run: ruff check .
+      
+    - name: Check code formatting
+      run: ruff format --check .
+      
+    - name: Run MyPy type checker
+      run: mypy app
+      
+    - name: Run tests
+      run: pytest
+      
+    - name: Run security audit
+      run: bandit -r app -f json -o bandit-report.json || true
+      
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-report
+        path: backend/bandit-report.json
+        
+  database-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: quotes_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev,test]"
+        
+    - name: Wait for PostgreSQL
+      run: |
+        while ! pg_isready -h localhost -p 5432 -U app; do
+          sleep 1
+        done
+        
+    - name: Run database tests
+      env:
+        DATABASE_URL: postgresql+psycopg://app:app@localhost:5432/quotes_test
+      run: |
+        pytest tests/ -v --tb=short
+        
+  performance-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev,test]"
+        
+    - name: Install performance tools
+      run: |
+        pip install pytest-benchmark memory-profiler
+        
+    - name: Run performance tests
+      run: |
+        pytest tests/ --benchmark-only --benchmark-skip || true
+        
+    - name: Check memory usage
+      run: |
+        python -m memory_profiler app/main.py || true

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const token = authHeader.substring(7)
     
     // Proxy request to backend
-    const backendResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/price-profiles`, {
+    const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/price-profiles`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`

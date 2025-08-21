@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
+    const backendUrl = process.env['BACKEND_URL'] || 'http://localhost:8000'
     const response = await fetch(`${backendUrl}/auto-tuning/insights`, {
       headers: {
         'Authorization': token,

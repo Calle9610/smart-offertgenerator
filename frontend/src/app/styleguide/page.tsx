@@ -2,16 +2,11 @@
 
 import { useState } from 'react'
 import { 
-  Sun, 
-  Moon, 
-  Monitor, 
   Check, 
   AlertCircle, 
   Info, 
-  X,
   Mail,
   Search,
-  User,
   Settings,
   Download,
   Plus

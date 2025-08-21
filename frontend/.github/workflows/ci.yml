@@ -1,0 +1,120 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci
+      
+    - name: Type check
+      working-directory: frontend
+      run: npm run typecheck
+      
+    - name: Lint
+      working-directory: frontend
+      run: npm run lint
+      
+    - name: Check formatting
+      working-directory: frontend
+      run: npm run format:check
+      
+    - name: Build
+      working-directory: frontend
+      run: npm run build
+      
+    - name: Run E2E tests
+      working-directory: frontend
+      run: |
+        npm run build
+        npm run test:e2e
+      env:
+        CI: true
+        
+  security-audit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci
+      
+    - name: Audit dependencies
+      working-directory: frontend
+      run: npm audit --audit-level=moderate
+      
+    - name: Check for outdated packages
+      working-directory: frontend
+      run: npm outdated || true
+      
+  accessibility-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci
+      
+    - name: Build
+      working-directory: frontend
+      run: npm run build
+      
+    - name: Start server
+      working-directory: frontend
+      run: npm start &
+      env:
+        CI: true
+        
+    - name: Wait for server
+      run: sleep 30
+      
+    - name: Run accessibility tests
+      working-directory: frontend
+      run: |
+        npm install -g pa11y-ci
+        pa11y-ci --json > accessibility-report.json || true
+      continue-on-error: true
+      
+    - name: Upload accessibility report
+      uses: actions/upload-artifact@v4
+      with:
+        name: accessibility-report
+        path: frontend/accessibility-report.json

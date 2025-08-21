@@ -24,7 +24,6 @@ import { motion } from 'framer-motion'
 import { 
   Plus, 
   Search, 
-  Filter, 
   Eye, 
   Edit, 
   Send, 
@@ -41,11 +40,9 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { 
   usePromiseState, 
-  TableSkeleton, 
-  QuotesEmptyState, 
-  SearchEmptyState,
-  ServerErrorState,
-  Skeleton
+  LoadingSkeleton, 
+  ErrorState, 
+  useSuccessHandler
 } from '@/components/system'
 import { useCopy } from '@/copy/useCopy'
 
@@ -101,18 +98,20 @@ const QuoteTableRow = memo(({
   index, 
   onView, 
   onEdit, 
-  onSend 
+  onSend,
+  isSending
 }: { 
   quote: typeof mockQuotes[0]
   index: number
   onView: (id: string) => void
   onEdit: (id: string) => void
   onSend: (id: string) => void
+  isSending: boolean
 }) => (
   <motion.tr
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.2, delay: index * 0.05, ease: 'ease-out' }}
+    transition={{ duration: 0.2, delay: index * 0.05, ease: 'easeOut' }}
     className="hover:bg-gray-50 transition-all duration-150 ease-out"
   >
     <td className="px-6 py-4 whitespace-nowrap">
@@ -146,10 +145,10 @@ const QuoteTableRow = memo(({
     </td>
     <td className="px-6 py-4 whitespace-nowrap">
       <Badge 
-        variant={statusConfig[quote.status].variant}
+        variant={statusConfig[quote.status as keyof typeof statusConfig].variant}
         size="sm"
       >
-        {statusConfig[quote.status].label}
+        {statusConfig[quote.status as keyof typeof statusConfig].label}
       </Badge>
     </td>
     <td className="px-6 py-4 whitespace-nowrap">
@@ -166,7 +165,7 @@ const QuoteTableRow = memo(({
           variant="ghost"
           size="sm"
           onClick={() => onView(quote.id)}
-          aria-label={`${copy.actions.view} offert ${quote.quoteNumber}`}
+          aria-label={`Visa offert ${quote.quoteNumber}`}
           className="transition-all duration-150 ease-out"
         >
           <Eye className="h-4 w-4" />
@@ -175,7 +174,7 @@ const QuoteTableRow = memo(({
           variant="ghost"
           size="sm"
           onClick={() => onEdit(quote.id)}
-          aria-label={`${copy.actions.edit} offert ${quote.quoteNumber}`}
+          aria-label={`Redigera offert ${quote.quoteNumber}`}
           className="transition-all duration-150 ease-out"
         >
           <Edit className="h-4 w-4" />
@@ -184,7 +183,9 @@ const QuoteTableRow = memo(({
           variant="ghost"
           size="sm"
           onClick={() => onSend(quote.id)}
-          aria-label={`${copy.actions.send} offert ${quote.quoteNumber}`}
+          disabled={isSending}
+          loading={isSending}
+          aria-label={`Skicka offert ${quote.quoteNumber}`}
           className="transition-all duration-150 ease-out"
         >
           <Send className="h-4 w-4" />
@@ -199,11 +200,19 @@ QuoteTableRow.displayName = 'QuoteTableRow'
 export default function QuotesPage() {
   const router = useRouter()
   const copy = useCopy()
+  const { handleSendSuccess } = useSuccessHandler()
   
   // State management
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateRange, setDateRange] = useState('all')
+  
+  // Loading states för actions
+  const [loadingStates, setLoadingStates] = useState<{
+    sendQuote: { [key: string]: boolean }
+  }>({
+    sendQuote: {}
+  })
   
   // Use the new promise state hook
   const quotesState = usePromiseState(mockQuotes)
@@ -239,10 +248,45 @@ export default function QuotesPage() {
     router.push(`/quotes/${id}/edit`)
   }, [router])
 
-  const handleSendQuote = useCallback((id: string) => {
-    // TODO: Implementera sändning
-    console.log('Sending quote:', id)
-  }, [])
+  const handleSendQuote = useCallback(async (id: string) => {
+    // Sätt loading state för denna offert
+    setLoadingStates(prev => ({
+      ...prev,
+      sendQuote: { ...prev.sendQuote, [id]: true }
+    }))
+    
+    try {
+      // TODO: Implementera riktig API-anrop
+      await new Promise(resolve => setTimeout(resolve, 2000)) // Simulera API-anrop
+      
+      // Simulera framgångsrik sändning
+      console.log('Quote sent successfully:', id)
+      
+      // Visa success feedback
+      handleSendSuccess('offert', undefined, [
+        {
+          label: 'Visa offert',
+          icon: 'external',
+          onClick: () => console.log('Show quote:', id)
+        }
+      ])
+      
+      // Här skulle vi kunna uppdatera offertens status till 'sent'
+      // setQuotes(prev => prev.map(q => 
+      //   q.id === id ? { ...q, status: 'sent' } : q
+      // ))
+      
+    } catch (error) {
+      console.error('Failed to send quote:', error)
+      // Här skulle vi kunna visa en error toast
+    } finally {
+      // Rensa loading state
+      setLoadingStates(prev => ({
+        ...prev,
+        sendQuote: { ...prev.sendQuote, [id]: false }
+      }))
+    }
+  }, [handleSendSuccess])
 
   const handleRetry = useCallback(() => {
     // Simulera en ny fetch
@@ -255,9 +299,10 @@ export default function QuotesPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Offertlista</h1>
-          <Skeleton className="h-10 w-32" />
+          <LoadingSkeleton className="h-10 w-32" />
         </div>
-        <TableSkeleton rows={5} />
+        {/* TableSkeleton is removed as per new_code, so we'll just show a placeholder or remove it if not needed */}
+        <p className="text-center text-gray-500">Laddar offerter...</p>
       </div>
     )
   }
@@ -265,17 +310,12 @@ export default function QuotesPage() {
   // Error state
   if (quotesState.isError) {
     return (
-      <ServerErrorState
+      <ErrorState
         error={quotesState.error}
         retry={{
           onClick: handleRetry,
-          label: copy.actions.refresh
+          label: 'Försök igen'
         }}
-        actions={[{
-          label: copy.actions.create,
-          onClick: handleCreateQuote,
-          variant: 'primary'
-        }]}
       />
     )
   }
@@ -283,30 +323,64 @@ export default function QuotesPage() {
   // Empty state
   if (!quotesState.data || quotesState.data.length === 0) {
     return (
-      <QuotesEmptyState
-        onCreateQuote={handleCreateQuote}
-        onImportQuotes={() => console.log('Import quotes')}
-      />
+      <div className="text-center py-12">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 mb-4">
+          <FileText className="h-8 w-8 text-gray-400" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Inga offerter än</h3>
+        <p className="text-gray-600 max-w-md mx-auto mb-6">
+          Skapa din första offert för att komma igång med att hantera kundprojekt.
+        </p>
+        <div className="flex gap-3 justify-center">
+          <Button
+            onClick={handleCreateQuote}
+            leftIcon={<Plus className="h-4 w-4" />}
+            variant="default"
+          >
+            {copy.actions.create}
+          </Button>
+          <Button
+            onClick={() => console.log('Import quotes')}
+            variant="outline"
+          >
+            Importera offerter
+          </Button>
+        </div>
+      </div>
     )
   }
 
   // Success state with filtered results
   if (filteredQuotes.length === 0) {
     return (
-      <SearchEmptyState
-        searchTerm={searchTerm}
-        onClearSearch={() => {
-          setSearchTerm('')
-          setStatusFilter('all')
-          setDateRange('all')
-        }}
-        onNewSearch={() => setSearchTerm('')}
-        action={{
-          label: copy.actions.create,
-          onClick: handleCreateQuote,
-          variant: 'primary'
-        }}
-      />
+      <div className="text-center py-12">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 mb-4">
+          <Search className="h-8 w-8 text-gray-400" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Inga resultat hittades</h3>
+        <p className="text-gray-600 max-w-md mx-auto mb-6">
+          Prova att ändra dina söktermer eller filter för att hitta det du letar efter.
+        </p>
+        <div className="flex gap-3 justify-center">
+          <Button
+            onClick={() => {
+              setSearchTerm('')
+              setStatusFilter('all')
+              setDateRange('all')
+            }}
+            variant="outline"
+          >
+            Rensa sökning
+          </Button>
+          <Button
+            onClick={handleCreateQuote}
+            leftIcon={<Plus className="h-4 w-4" />}
+            variant="default"
+          >
+            {copy.actions.create}
+          </Button>
+        </div>
+      </div>
     )
   }
 
@@ -351,7 +425,6 @@ export default function QuotesPage() {
               value={statusFilter}
               onValueChange={setStatusFilter}
               aria-label={`${copy.actions.filter} efter status`}
-              className="transition-all duration-150 ease-out"
             >
               {statusOptions.map(option => (
                 <option key={option.value} value={option.value}>
@@ -364,7 +437,6 @@ export default function QuotesPage() {
               value={dateRange}
               onValueChange={setDateRange}
               aria-label={`${copy.actions.filter} efter datum`}
-              className="transition-all duration-150 ease-out"
             >
               <option value="all">Alla datum</option>
               <option value="today">Idag</option>
@@ -386,10 +458,10 @@ export default function QuotesPage() {
           size="sm"
           leftIcon={<RefreshCw className="h-4 w-4" />}
           onClick={handleRetry}
-          aria-label={`${copy.actions.refresh} offertlista`}
+          aria-label="Uppdatera offertlista"
           className="transition-all duration-150 ease-out"
         >
-          {copy.actions.refresh}
+          Uppdatera
         </Button>
       </div>
 
@@ -431,6 +503,7 @@ export default function QuotesPage() {
                   onView={handleViewQuote}
                   onEdit={handleEditQuote}
                   onSend={handleSendQuote}
+                  isSending={loadingStates.sendQuote[quote.id] || false}
                 />
               ))}
             </tbody>

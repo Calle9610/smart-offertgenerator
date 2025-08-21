@@ -14,7 +14,7 @@ export async function PUT(
     const body = await request.json()
     const ruleId = params.id
 
-    const response = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/admin/rules/${ruleId}`, {
+    const response = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/admin/rules/${ruleId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

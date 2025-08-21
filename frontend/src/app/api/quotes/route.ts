@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const token = authHeader.substring(7)
     
     // Proxy request to backend
-    const backendResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/quotes`, {
+    const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/quotes`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     const token = authHeader.substring(7)
     
     // Proxy request to backend
-    const backendResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/quotes`, {
+    const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/quotes`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

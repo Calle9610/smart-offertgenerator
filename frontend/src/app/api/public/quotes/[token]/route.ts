@@ -1,13 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
 export async function GET(
-  request: NextRequest,
   { params }: { params: { token: string } }
 ) {
   try {
     const { token } = params
     const backendResponse = await fetch(
-      `${process.env.BACKEND_URL || 'http://localhost:8000'}/public/quotes/${token}`,
+      `${process.env['BACKEND_URL'] || 'http://localhost:8000'}/public/quotes/${token}`,
       {
         method: 'GET',
         headers: {

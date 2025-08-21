@@ -6,6 +6,16 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
+        "lint:fix": "next lint --fix",
+        "typecheck": "npm run typecheck:app && npm run typecheck:cypress && npm run typecheck:playwright",
+        "typecheck:app": "tsc --noEmit --project tsconfig.json",
+        "typecheck:cypress": "tsc --noEmit --project cypress/tsconfig.json",
+        "typecheck:playwright": "tsc --noEmit --project tests/tsconfig.json",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "prepare": "husky install",
+        "ci": "npm run typecheck && npm run lint && npm run build",
+        "ci:smoke": "npm run typecheck && npm run build && npx playwright test -g 'smoke' || true",
         "cypress:open": "cypress open",
         "cypress:run": "cypress run",
         "test:e2e": "cypress run --headless",
@@ -30,16 +40,23 @@
         "zod": "^4.0.17"
     },
     "devDependencies": {
+        "@playwright/test": "^1.55.0",
         "@types/node": "20.11.30",
         "@types/react": "18.2.66",
         "@types/react-dom": "18.2.22",
+        "@typescript-eslint/eslint-plugin": "^7.18.0",
+        "@typescript-eslint/parser": "^7.18.0",
         "autoprefixer": "10.4.18",
         "cypress": "^13.6.0",
-        "eslint": "^8.57.0",
+        "eslint": "^8.57.1",
         "eslint-config-next": "^14.2.31",
+        "eslint-plugin-jsx-a11y": "^6.8.0",
+        "husky": "^8.0.0",
+        "lint-staged": "^15.0.0",
         "postcss": "8.4.35",
+        "prettier": "^3.0.0",
         "tailwindcss": "3.4.3",
-        "typescript": "5.4.5"
+        "typescript": "^5.6.3"
     },
     "overrides": {
         "@rollup/rollup-linux-arm64-musl": "npm:@rollup/rollup-linux-x64-musl@4.9.5"

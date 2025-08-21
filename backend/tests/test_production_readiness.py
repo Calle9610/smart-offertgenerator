@@ -18,7 +18,51 @@ class TestHealthChecks:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-        # May also include timestamp
+        assert "timestamp" in data
+
+    def test_healthz_endpoint(self):
+        """Test that healthz endpoint returns 200 OK with proper structure."""
+        response = client.get("/healthz")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["status"] == "alive"
+        assert "timestamp" in data
+        # Verify timestamp format (ISO 8601)
+        import datetime
+        timestamp = data["timestamp"]
+        assert timestamp.endswith("Z")
+        # Should be able to parse as ISO format
+        datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
+    def test_readiness_endpoint_success(self):
+        """Test that readiness endpoint returns 200 OK when database is available."""
+        response = client.get("/readiness")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["status"] == "ready"
+        assert data["database"] == "connected"
+        assert "timestamp" in data
+
+    @patch("app.main.get_db")
+    def test_readiness_endpoint_database_failure(self, mock_get_db):
+        """Test that readiness endpoint returns 503 when database is unavailable."""
+        # Mock database session that raises an exception
+        mock_session = MagicMock()
+        mock_session.execute.side_effect = Exception("Database connection failed")
+        mock_get_db.return_value = mock_session
+        
+        response = client.get("/readiness")
+        assert response.status_code == 503
+        data = response.json()
+        assert "detail" in data
+        detail = data["detail"]
+        assert detail["ok"] is False
+        assert detail["status"] == "not_ready"
+        assert detail["database"] == "disconnected"
+        assert "error" in detail
+        assert "timestamp" in detail
 
     def test_root_endpoint(self):
         """Test that root endpoint returns 200 OK."""
@@ -26,7 +70,66 @@ class TestHealthChecks:
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
-        # May also include message
+        assert "message" in data
+
+    def test_health_endpoints_response_time(self):
+        """Test that health endpoints respond quickly."""
+        import time
+        
+        # Test /healthz response time
+        start_time = time.time()
+        response = client.get("/healthz")
+        healthz_time = time.time() - start_time
+        assert response.status_code == 200
+        assert healthz_time < 1.0  # Should respond within 1 second
+        
+        # Test /readiness response time
+        start_time = time.time()
+        response = client.get("/readiness")
+        readiness_time = time.time() - start_time
+        assert response.status_code == 200
+        assert readiness_time < 2.0  # Should respond within 2 seconds (includes DB query)
+
+    def test_health_endpoints_concurrent_requests(self):
+        """Test that health endpoints handle concurrent requests properly."""
+        import threading
+        import time
+        
+        results = []
+        errors = []
+        
+        def make_healthz_request():
+            try:
+                response = client.get("/healthz")
+                results.append(("healthz", response.status_code))
+            except Exception as e:
+                errors.append(("healthz", str(e)))
+        
+        def make_readiness_request():
+            try:
+                response = client.get("/readiness")
+                results.append(("readiness", response.status_code))
+            except Exception as e:
+                errors.append(("readiness", str(e)))
+        
+        # Start multiple threads
+        threads = []
+        for _ in range(3):
+            threads.append(threading.Thread(target=make_healthz_request))
+            threads.append(threading.Thread(target=make_readiness_request))
+        
+        # Start all threads
+        for thread in threads:
+            thread.start()
+        
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+        
+        # All should succeed without errors
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+        assert len(results) == 6  # 3 healthz + 3 readiness
+        assert all(status == 200 for endpoint, status in results)
 
 
 class TestEnvironmentVariables:

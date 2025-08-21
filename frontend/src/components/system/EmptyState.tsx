@@ -1,3 +1,5 @@
+'use client'
+
 import { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -21,14 +23,14 @@ interface EmptyStateProps {
   action?: {
     label: string
     onClick: () => void
-    variant?: 'primary' | 'secondary' | 'outline'
-    icon?: ReactNode
+    variant?: 'default' | 'secondary' | 'outline'
+    icon?: ReactNode | any
   }
   secondaryAction?: {
     label: string
     onClick: () => void
     variant?: 'secondary' | 'outline'
-    icon?: ReactNode
+    icon?: ReactNode | any
   }
   className?: string
 }
@@ -79,8 +81,8 @@ export function EmptyState({
   const config = variant !== 'default' ? defaultConfigs[variant] : null
   const IconComponent = icon || (config?.icon ? config.icon : FileText)
   
-  const finalTitle = title || config?.title || copy.states.empty
-  const finalDescription = description || config?.description || 'Det finns inget att visa just nu.'
+  const finalTitle = title || config?.title || copy.states.empty.title
+  const finalDescription = description || config?.description || copy.states.empty.desc
 
   return (
     <div className={cn(
@@ -98,18 +100,18 @@ export function EmptyState({
       </div>
       
       <h3 className="text-lg font-semibold text-gray-900 mb-2">
-        {finalTitle}
+        {typeof finalTitle === 'string' ? finalTitle : (finalTitle as any).title}
       </h3>
       
       <p className="text-gray-600 max-w-md mb-8">
-        {finalDescription}
+        {typeof finalDescription === 'string' ? finalDescription : (finalDescription as any).desc}
       </p>
       
       <div className="flex flex-col sm:flex-row gap-3">
         {action && (
           <Button
             onClick={action.onClick}
-            variant={action.variant || 'primary'}
+            variant={action.variant || 'default'}
             leftIcon={action.icon || Plus}
           >
             {action.label}
@@ -179,7 +181,7 @@ export function QuotesEmptyState({
       action={onCreateQuote ? {
         label: 'Skapa första offerten',
         onClick: onCreateQuote,
-        variant: 'primary'
+        variant: 'default'
       } : undefined}
       secondaryAction={onImportQuotes ? {
         label: 'Importera offerter',
@@ -205,7 +207,7 @@ export function CustomersEmptyState({
       action={onAddCustomer ? {
         label: 'Lägg till kund',
         onClick: onAddCustomer,
-        variant: 'primary'
+        variant: 'default'
       } : undefined}
       secondaryAction={onImportCustomers ? {
         label: 'Importera kunder',

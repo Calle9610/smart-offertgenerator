@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    const response = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/admin/rules/test`, {
+    const response = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/admin/rules/test`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

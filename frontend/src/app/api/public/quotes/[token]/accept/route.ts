@@ -9,7 +9,7 @@ export async function POST(
     const body = await request.json()
     
     const backendResponse = await fetch(
-      `${process.env.BACKEND_URL || 'http://localhost:8000'}/public/quotes/${token}/accept`,
+      `${process.env['BACKEND_URL'] || 'http://localhost:8000'}/public/quotes/${token}/accept`,
       {
         method: 'POST',
         headers: {

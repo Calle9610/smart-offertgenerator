@@ -1,15 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+
 import { useRouter } from 'next/navigation'
 import IntakeWizard from '@/components/IntakeWizard'
 
 export default function NewIntakePage() {
   const router = useRouter()
-  const [requirementsId, setRequirementsId] = useState<string | null>(null)
 
   const handleComplete = (reqId: string) => {
-    setRequirementsId(reqId)
     // Redirect to quotes/new with the requirements ID
     router.push(`/quotes/new?reqId=${reqId}`)
   }

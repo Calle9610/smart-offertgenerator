@@ -1,14 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
 export async function POST(
-  request: NextRequest,
   { params }: { params: { token: string } }
 ) {
   try {
     const token = params.token
     
     // Proxy request to backend
-    const backendUrl = process.env.BACKEND_URL || 'http://backend:8000'
+    const backendUrl = process.env['BACKEND_URL'] || 'http://backend:8000'
     const response = await fetch(`${backendUrl}/public/quotes/${token}/decline`, {
       method: 'POST',
     })

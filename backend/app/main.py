@@ -141,6 +141,79 @@ def health_check():
     return {"status": "healthy", "timestamp": "2025-08-12T18:00:00Z"}
 
 
+@app.get("/healthz")
+def healthz_check():
+    """
+    Liveness check endpoint for Kubernetes health probes.
+    
+    This endpoint indicates if the application is running and can handle requests.
+    It should always return 200 OK unless the application is completely broken.
+    
+    Returns:
+        - 200 OK: Application is alive and running
+    
+    Example:
+        curl http://localhost:8000/healthz
+        {"ok": true, "status": "alive", "timestamp": "2024-01-15T10:30:00Z"}
+    """
+    from datetime import datetime
+    return {
+        "ok": True, 
+        "status": "alive",
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+
+@app.get("/readiness")
+def readiness_check(db: Session = Depends(get_db)):
+    """
+    Readiness check endpoint that verifies database connectivity.
+    
+    This endpoint is used by Kubernetes and other orchestration systems
+    to determine if the application is ready to receive traffic.
+    
+    Returns:
+        - 200 OK: Database is accessible and application is ready
+        - 503 Service Unavailable: Database is not accessible
+    
+    Example:
+        curl http://localhost:8000/readiness
+        {"ok": true, "status": "ready", "database": "connected", "timestamp": "2024-01-15T10:30:00Z"}
+    """
+    try:
+        from datetime import datetime
+        
+        # Test database connection by executing a simple query
+        result = db.execute("SELECT 1 as health_check").fetchone()
+        
+        if result and result[0] == 1:
+            return {
+                "ok": True, 
+                "status": "ready",
+                "database": "connected",
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+        else:
+            raise Exception("Database health check query failed")
+            
+    except Exception as e:
+        from datetime import datetime
+        # Log the error for debugging
+        print(f"Readiness check failed: {e}")
+        # Return 503 Service Unavailable
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "ok": False,
+                "status": "not_ready", 
+                "database": "disconnected",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+        )
+
+
 # Authentication endpoints
 @app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(

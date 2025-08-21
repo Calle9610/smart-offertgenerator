@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const token = authHeader.substring(7)
     
     // Proxy request to backend
-    const backendResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/quotes/autogenerate`, {
+          const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/quotes/autogenerate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

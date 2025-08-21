@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useRouter } from 'next/navigation'
-import { createProjectRequirements, login } from '@/app/api'
+
+import { createProjectRequirements } from '@/app/api'
 import LoginForm from './LoginForm'
 
 // Zod schema for project requirements
@@ -32,7 +32,6 @@ interface IntakeWizardProps {
 }
 
 export default function IntakeWizard({ onComplete }: IntakeWizardProps) {
-  const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
   const [requirementsId, setRequirementsId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -53,7 +52,7 @@ export default function IntakeWizard({ onComplete }: IntakeWizardProps) {
     
     if (storedToken) {
       // Validate token by testing it against backend
-      fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'}/users/me`, {
+      fetch(`${process.env['NEXT_PUBLIC_API_BASE'] || 'http://localhost:8000'}/users/me`, {
         headers: {
           'Authorization': `Bearer ${storedToken}`
         }
@@ -80,10 +79,9 @@ export default function IntakeWizard({ onComplete }: IntakeWizardProps) {
 
   const {
     register,
-    handleSubmit,
     watch,
     setValue,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<ProjectRequirements>({
     resolver: zodResolver(projectRequirementsSchema),
     defaultValues: {
@@ -278,7 +276,7 @@ export default function IntakeWizard({ onComplete }: IntakeWizardProps) {
 }
 
 // Step 1: Basic data
-function Step1BasicData({ register, errors, values, setValue }: any) {
+function Step1BasicData({ register, errors }: any) {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-gray-900">Grunddata</h2>
@@ -348,7 +346,7 @@ function Step1BasicData({ register, errors, values, setValue }: any) {
 }
 
 // Step 2: Installation
-function Step2Installation({ register, errors, values, setValue }: any) {
+function Step2Installation({ register, values, setValue }: any) {
   const addTag = (field: 'materialPrefs' | 'siteConstraints', tag: string) => {
     if (tag.trim() && !values[field].includes(tag.trim())) {
       setValue(field, [...values[field], tag.trim()])

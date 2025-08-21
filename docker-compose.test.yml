@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  backend:
+    environment:
+      - TESTING=true
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/test_db
+    volumes:
+      - ./backend:/app
+      - ./backend/tests:/app/tests
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        python -c 'import time; import psycopg2; 
+        while True:
+          try:
+            psycopg2.connect(\"postgresql://postgres:postgres@postgres:5432/test_db\")
+            break
+          except:
+            time.sleep(1)' &&
+        echo 'Database ready!' &&
+        python -m pytest tests/test_smoke_docker.py -v
+      "
+
+  postgres:
+    environment:
+      - POSTGRES_DB=test_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_test_data:

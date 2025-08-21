@@ -23,7 +23,7 @@ export async function POST(
     const { selectedItemIds = [] } = body
     
     // Proxy request to backend with selected options
-    const backendResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/quotes/${id}/pdf`, {
+          const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/quotes/${id}/pdf`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

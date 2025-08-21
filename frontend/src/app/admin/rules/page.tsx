@@ -98,7 +98,7 @@ export default function AdminRulesPage() {
       return true
     } catch (error) {
       if (error instanceof z.ZodError) {
-        setValidationError(`Valideringsfel: ${error.errors.map(e => e.message).join(', ')}`)
+        setValidationError(`Valideringsfel: ${error.issues.map(e => e.message).join(', ')}`)
       } else {
         setValidationError('Ogiltig JSON-format')
       }
