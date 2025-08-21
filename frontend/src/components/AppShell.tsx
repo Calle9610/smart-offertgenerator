@@ -59,6 +59,12 @@ const navigation: NavigationItem[] = [
     icon: Settings,
     description: 'Applikationsinställningar'
   },
+  { 
+    name: 'Test ErrorBoundary', 
+    href: '/test-error-boundary', 
+    icon: BookOpen,
+    description: 'Testa ErrorBoundary-funktionalitet'
+  },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
