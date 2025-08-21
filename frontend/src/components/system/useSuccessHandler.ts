@@ -65,8 +65,8 @@ export const useSuccessHandler = (options: SuccessHandlerOptions = {}) => {
       : `${itemType} skapades framgångsrikt!`
     
     return handleSuccess(message, 'Skapande', {
-      actions,
-      showActions: actions && actions.length > 0
+      actions: actions || [],
+      showActions: !!(actions && actions.length > 0)
     })
   }, [handleSuccess])
 
@@ -80,8 +80,8 @@ export const useSuccessHandler = (options: SuccessHandlerOptions = {}) => {
       : `${itemType} uppdaterades framgångsrikt!`
     
     return handleSuccess(message, 'Uppdatering', {
-      actions,
-      showActions: actions && actions.length > 0
+      actions: actions || [],
+      showActions: !!(actions && actions.length > 0)
     })
   }, [handleSuccess])
 
@@ -106,8 +106,8 @@ export const useSuccessHandler = (options: SuccessHandlerOptions = {}) => {
       : `${itemType} skickades framgångsrikt!`
     
     return handleSuccess(message, 'Sändning', {
-      actions,
-      showActions: actions && actions.length > 0
+      actions: actions || [],
+      showActions: !!(actions && actions.length > 0)
     })
   }, [handleSuccess])
 
@@ -118,8 +118,8 @@ export const useSuccessHandler = (options: SuccessHandlerOptions = {}) => {
     const message = `${itemType} sparades framgångsrikt!`
     
     return handleSuccess(message, 'Sparande', {
-      actions,
-      showActions: actions && actions.length > 0
+      actions: actions || [],
+      showActions: !!(actions && actions.length > 0)
     })
   }, [handleSuccess])
 
@@ -131,8 +131,8 @@ export const useSuccessHandler = (options: SuccessHandlerOptions = {}) => {
     const message = `${count} ${itemType} importerades framgångsrikt!`
     
     return handleSuccess(message, 'Import', {
-      actions,
-      showActions: actions && actions.length > 0
+      actions: actions || [],
+      showActions: !!(actions && actions.length > 0)
     })
   }, [handleSuccess])
 
@@ -146,8 +146,8 @@ export const useSuccessHandler = (options: SuccessHandlerOptions = {}) => {
       : `${itemType} exporterades framgångsrikt!`
     
     return handleSuccess(message, 'Export', {
-      actions,
-      showActions: actions && actions.length > 0
+      actions: actions || [],
+      showActions: !!(actions && actions.length > 0)
     })
   }, [handleSuccess])
 

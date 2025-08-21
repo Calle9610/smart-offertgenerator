@@ -35,6 +35,7 @@ const ErrorToast: React.FC<ErrorToastProps> = ({
       }, duration)
       return () => clearTimeout(timer)
     }
+    return undefined
   }, [duration, id, onDismiss])
 
   const handleDismiss = () => {

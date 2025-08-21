@@ -21,5 +21,6 @@ export { default as ProgressIndicator } from './ProgressIndicator'
 // Re-export types
 export type { ErrorDetails, ErrorHandlerOptions } from './useErrorHandler'
 export type { ToastItem } from './ErrorToastManager'
-export type { SuccessDetails, SuccessHandlerOptions, SuccessToastItem } from './SuccessToastManager'
+export type { SuccessDetails, SuccessHandlerOptions } from './useSuccessHandler'
+export type { SuccessToastItem } from './SuccessToastManager'
 export type { ProgressStep, ProgressIndicatorProps } from './ProgressIndicator'

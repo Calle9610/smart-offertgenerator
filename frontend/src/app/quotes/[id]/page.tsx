@@ -14,7 +14,6 @@ import {
   User, 
   Building, 
   Calendar,
-  AlertCircle,
   FileDown
 } from 'lucide-react'
 
@@ -270,7 +269,7 @@ export default async function QuoteDetailPage({
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <ErrorState
           variant="server"
-          error={error}
+          error={error instanceof Error ? error.message : String(error)}
           title="Kunde inte ladda offert"
           description="Ett fel uppstod när offerten skulle hämtas. Kontrollera att länken är korrekt och försök igen."
           retry={{

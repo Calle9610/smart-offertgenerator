@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { sv } from '@/copy/sv'
+
 
 interface SkeletonProps {
   className?: string
@@ -131,23 +131,23 @@ export function LoadingSkeleton({ variant = 'card', rows = 3, className }: Loadi
 
 // Specific skeleton components for common use cases
 export function TableSkeleton({ rows = 5, className }: { rows?: number; className?: string }) {
-  return <LoadingSkeleton variant="table" rows={rows} className={className} />
+  return <LoadingSkeleton variant="table" rows={rows} className={className || ''} />
 }
 
 export function CardSkeleton({ className }: { className?: string }) {
-  return <LoadingSkeleton variant="card" className={className} />
+  return <LoadingSkeleton variant="card" className={className || ''} />
 }
 
 export function ListSkeleton({ rows = 5, className }: { rows?: number; className?: string }) {
-  return <LoadingSkeleton variant="list" rows={rows} className={className} />
+  return <LoadingSkeleton variant="list" rows={rows} className={className || ''} />
 }
 
 export function FormSkeleton({ className }: { className?: string }) {
-  return <LoadingSkeleton variant="form" className={className} />
+  return <LoadingSkeleton variant="form" className={className || ''} />
 }
 
 export function ProfileSkeleton({ className }: { className?: string }) {
-  return <LoadingSkeleton variant="profile" className={className} />
+  return <LoadingSkeleton variant="profile" className={className || ''} />
 }
 
 export { Skeleton }

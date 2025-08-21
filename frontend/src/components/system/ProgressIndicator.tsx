@@ -22,8 +22,6 @@ export interface ProgressIndicatorProps {
 
 const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({
   steps,
-  currentStep,
-  onStepComplete,
   onComplete,
   showProgress = true,
   className = ''

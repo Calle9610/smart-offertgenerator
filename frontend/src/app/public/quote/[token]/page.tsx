@@ -424,14 +424,14 @@ export default function PublicQuotePage() {
                 className="inline-flex items-center px-6 py-3 bg-white text-blue-600 font-medium rounded-lg hover:bg-blue-50 transition-colors"
               >
                 <Phone className="h-4 w-4 mr-2" />
-                {copy.common.customer.phone}
+                +46 70 123 45 67
               </a>
               <a 
                 href="mailto:info@företag.se" 
                 className="inline-flex items-center px-6 py-3 bg-transparent border-2 border-white text-white font-medium rounded-lg hover:bg-white hover:text-blue-600 transition-colors"
               >
                 <Mail className="h-4 w-4 mr-2" />
-                {copy.common.customer.email}
+                info@företag.se
               </a>
             </div>
           </div>
