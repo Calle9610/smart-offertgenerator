@@ -32,16 +32,6 @@ export const sv = {
       vat: 'Moms',
       total: 'Totalt'
     },
-    customer: {
-      name: 'Kund',
-      email: 'E-post',
-      phone: 'Telefon'
-    },
-    project: {
-      name: 'Projekt',
-      address: 'Adress',
-      region: 'Region'
-    },
     questions: 'Har du frågor?',
     helpText: 'Vi hjälper dig gärna att välja rätt paket',
     choosePackage: 'Välj ditt paket',

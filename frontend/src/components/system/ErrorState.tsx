@@ -203,7 +203,7 @@ export function NetworkErrorState({
         onClick: onGoHome,
         variant: 'outline',
         icon: Home
-      }] : undefined}
+      }] : []}
       {...props}
     />
   )
@@ -231,7 +231,7 @@ export function ServerErrorState({
         onClick: onContactSupport,
         variant: 'outline',
         icon: Bug
-      }] : undefined}
+      }] : []}
       {...props}
     />
   )
@@ -245,8 +245,6 @@ export function AuthErrorState({
   onLogin: () => void
   onGoBack?: () => void
 } & Omit<ErrorStateProps, 'variant'>) {
-  const copy = useCopy()
-  
   return (
     <ErrorState
       variant="auth"
@@ -254,13 +252,13 @@ export function AuthErrorState({
         {
           label: 'Logga in',
           onClick: onLogin,
-          variant: 'default',
+          variant: 'default' as const,
           icon: User
         },
         ...(onGoBack ? [{
           label: 'Gå tillbaka',
           onClick: onGoBack,
-          variant: 'outline',
+          variant: 'outline' as const,
           icon: ArrowLeft
         }] : [])
       ]}
@@ -284,13 +282,13 @@ export function NotFoundErrorState({
         {
           label: 'Gå till startsidan',
           onClick: onGoHome,
-          variant: 'default',
+          variant: 'default' as const,
           icon: Home
         },
         ...(onGoBack ? [{
           label: 'Gå tillbaka',
           onClick: onGoBack,
-          variant: 'outline',
+          variant: 'outline' as const,
           icon: ArrowLeft
         }] : [])
       ]}
@@ -314,13 +312,13 @@ export function PermissionErrorState({
         {
           label: 'Kontakta administratör',
           onClick: onContactAdmin,
-          variant: 'default',
+          variant: 'default' as const,
           icon: User
         },
         ...(onGoBack ? [{
           label: 'Gå tillbaka',
           onClick: onGoBack,
-          variant: 'outline',
+          variant: 'outline' as const,
           icon: ArrowLeft
         }] : [])
       ]}

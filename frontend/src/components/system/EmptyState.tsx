@@ -143,6 +143,23 @@ export function SearchEmptyState({
   onClearSearch?: () => void
   onNewSearch?: () => void
 } & Omit<EmptyStateProps, 'variant'>) {
+  const actionProps = onClearSearch ? {
+    action: {
+      label: 'Rensa sökning',
+      onClick: onClearSearch,
+      variant: 'outline' as const,
+      icon: RefreshCw
+    }
+  } : {}
+  
+  const secondaryActionProps = onNewSearch ? {
+    secondaryAction: {
+      label: 'Ny sökning',
+      onClick: onNewSearch,
+      variant: 'secondary' as const
+    }
+  } : {}
+  
   return (
     <EmptyState
       variant="search"
@@ -151,17 +168,8 @@ export function SearchEmptyState({
         ? 'Prova att ändra dina söktermer eller använd bredare filter.'
         : 'Prova att ändra dina söktermer eller filter för att hitta det du letar efter.'
       }
-      action={onClearSearch ? {
-        label: 'Rensa sökning',
-        onClick: onClearSearch,
-        variant: 'outline',
-        icon: RefreshCw
-      } : undefined}
-      secondaryAction={onNewSearch ? {
-        label: 'Ny sökning',
-        onClick: onNewSearch,
-        variant: 'secondary'
-      } : undefined}
+      {...actionProps}
+      {...secondaryActionProps}
       {...props}
     />
   )
@@ -175,19 +183,27 @@ export function QuotesEmptyState({
   onCreateQuote?: () => void
   onImportQuotes?: () => void
 } & Omit<EmptyStateProps, 'variant'>) {
+  const actionProps = onCreateQuote ? {
+    action: {
+      label: 'Skapa första offerten',
+      onClick: onCreateQuote,
+      variant: 'default' as const
+    }
+  } : {}
+  
+  const secondaryActionProps = onImportQuotes ? {
+    secondaryAction: {
+      label: 'Importera offerter',
+      onClick: onImportQuotes,
+      variant: 'outline' as const
+    }
+  } : {}
+  
   return (
     <EmptyState
       variant="quotes"
-      action={onCreateQuote ? {
-        label: 'Skapa första offerten',
-        onClick: onCreateQuote,
-        variant: 'default'
-      } : undefined}
-      secondaryAction={onImportQuotes ? {
-        label: 'Importera offerter',
-        onClick: onImportQuotes,
-        variant: 'outline'
-      } : undefined}
+      {...actionProps}
+      {...secondaryActionProps}
       {...props}
     />
   )
@@ -201,19 +217,27 @@ export function CustomersEmptyState({
   onAddCustomer?: () => void
   onImportCustomers?: () => void
 } & Omit<EmptyStateProps, 'variant'>) {
+  const actionProps = onAddCustomer ? {
+    action: {
+      label: 'Lägg till kund',
+      onClick: onAddCustomer,
+      variant: 'default' as const
+    }
+  } : {}
+  
+  const secondaryActionProps = onImportCustomers ? {
+    secondaryAction: {
+      label: 'Importera kunder',
+      onClick: onImportCustomers,
+      variant: 'outline' as const
+    }
+  } : {}
+  
   return (
     <EmptyState
       variant="customers"
-      action={onAddCustomer ? {
-        label: 'Lägg till kund',
-        onClick: onAddCustomer,
-        variant: 'default'
-      } : undefined}
-      secondaryAction={onImportCustomers ? {
-        label: 'Importera kunder',
-        onClick: onImportCustomers,
-        variant: 'outline'
-      } : undefined}
+      {...actionProps}
+      {...secondaryActionProps}
       {...props}
     />
   )
