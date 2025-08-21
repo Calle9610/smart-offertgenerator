@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createQuote } from '@/app/api'
 import { CreateQuoteRequest, CreateQuoteRequestSchema } from '@/types/quote'
+import { sanitizeFormInput } from '@/lib/sanitization'
 
 interface QuoteFormProps {
   initialData?: CreateQuoteRequest
@@ -51,17 +52,23 @@ export default function QuoteForm({
   }, [initialData])
 
   const handleInputChange = (field: string, value: any) => {
+    // Sanitize text input to prevent XSS
+    const sanitizedValue = typeof value === 'string' ? sanitizeFormInput(value) : value
+    
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [field]: sanitizedValue
     }))
   }
 
   const handleItemChange = (index: number, field: string, value: any) => {
+    // Sanitize text input to prevent XSS
+    const sanitizedValue = typeof value === 'string' ? sanitizeFormInput(value) : value
+    
     setFormData(prev => ({
       ...prev,
       items: prev.items.map((item, i) => 
-        i === index ? { ...item, [field]: value } : item
+        i === index ? { ...item, [field]: sanitizedValue } : item
       )
     }))
   }

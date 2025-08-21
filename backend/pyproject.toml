@@ -17,6 +17,7 @@ dependencies = [
   "python-jose[cryptography]",
   "passlib[bcrypt]",
   "email-validator",
+  "bleach>=6.0.0",
 ]
 
 [project.optional-dependencies]

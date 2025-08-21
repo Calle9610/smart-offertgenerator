@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 import { createProjectRequirements, getCurrentUser } from '@/app/api'
 import LoginForm from './LoginForm'
+import { sanitizeFormInput } from '@/lib/sanitization'
 
 // Zod schema for project requirements
 const projectRequirementsSchema = z.object({
@@ -18,11 +19,11 @@ const projectRequirementsSchema = z.object({
   // Step 2: Installation
   hasPlumbingWork: z.boolean(),
   hasElectricalWork: z.boolean(),
-  materialPrefs: z.array(z.string()).max(10),
+  materialPrefs: z.array(z.string().transform((val) => sanitizeFormInput(val))).max(10),
   
   // Step 3: Site & notes
-  siteConstraints: z.array(z.string()).max(10),
-  notes: z.string().max(2000).optional(),
+  siteConstraints: z.array(z.string().transform((val) => sanitizeFormInput(val))).max(10),
+  notes: z.string().max(2000).transform((val) => sanitizeFormInput(val)).optional(),
 })
 
 type ProjectRequirements = z.infer<typeof projectRequirementsSchema>
