@@ -12,13 +12,16 @@ import {
   Users, 
   BookOpen,
   ChevronRight,
-  Building2
+  Building2,
+  LogOut,
+  User
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/AuthContext'
 
 interface NavigationItem {
   name: string
@@ -26,6 +29,7 @@ interface NavigationItem {
   icon: React.ComponentType<{ className?: string }> | React.ComponentType<any>
   badge?: string
   description?: string
+  requireSuperUser?: boolean
 }
 
 const navigation: NavigationItem[] = [
@@ -60,6 +64,20 @@ const navigation: NavigationItem[] = [
     description: 'Applikationsinställningar'
   },
   { 
+    name: 'Auto-tuning', 
+    href: '/auto-tuning', 
+    icon: BookOpen,
+    description: 'Automatisk optimering',
+    requireSuperUser: true
+  },
+  { 
+    name: 'Admin Regler', 
+    href: '/admin/rules', 
+    icon: Settings,
+    description: 'Administrera regler',
+    requireSuperUser: true
+  },
+  { 
     name: 'Test ErrorBoundary', 
     href: '/test-error-boundary', 
     icon: BookOpen,
@@ -73,6 +91,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const sidebarRef = useRef<HTMLDivElement>(null)
   const firstFocusableRef = useRef<HTMLButtonElement>(null)
   const lastFocusableRef = useRef<HTMLButtonElement>(null)
+  const { user, isAuthenticated, logout } = useAuth()
+
+  // Filtrera navigation baserat på användarbehörighet
+  const filteredNavigation = navigation.filter(item => {
+    if (item.requireSuperUser && (!user || !user.is_superuser)) {
+      return false
+    }
+    return true
+  })
 
   // Stäng sidebar på ESC
   useEffect(() => {
@@ -226,7 +253,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Navigation */}
           <nav className="flex-1 px-2 py-4 space-y-1">
-            {navigation.map((item) => {
+            {filteredNavigation.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
               const Icon = item.icon
               
@@ -261,7 +288,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* Sidebar footer */}
-          <div className="border-t p-4">
+          <div className="border-t p-4 space-y-3">
+            {/* Användarinformation */}
+            {isAuthenticated && user && (
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground truncate">{user.username}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  </div>
+                </div>
+                {user.is_superuser && (
+                  <Badge variant="secondary" size="sm" className="mt-2">
+                    Superuser
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            {/* System status */}
             <div className="rounded-lg bg-muted/50 p-3">
               <div className="flex items-center gap-2 text-sm">
                 <div className="h-2 w-2 rounded-full bg-success-500" />
@@ -274,6 +320,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 })}
               </p>
             </div>
+
+            {/* Logout knapp */}
+            {isAuthenticated && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                className="w-full"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logga ut
+              </Button>
+            )}
           </div>
         </div>
       </aside>
