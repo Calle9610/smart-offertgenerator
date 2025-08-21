@@ -6,6 +6,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Import sanitization functions
+from .sanitization import (
+    validate_and_sanitize_html,
+    validate_and_sanitize_text,
+    validate_and_sanitize_url,
+    validate_and_sanitize_list,
+    html_field
+)
+
 
 # Enums for validation
 class RoomType(str, Enum):
@@ -52,18 +61,24 @@ class LoginResponse(BaseModel):
 
 class QuoteItemIn(BaseModel):
     kind: str
-    ref: Optional[str] = None
-    description: Optional[str] = None
+    ref: Optional[str] = Field(None, description="Item reference code")
+    description: Optional[str] = Field(None, description="Item description")
     qty: Decimal
-    unit: Optional[str] = None
+    unit: Optional[str] = Field(None, description="Unit of measurement")
     unit_price: Decimal
     is_optional: bool = Field(False, description="Whether this item is optional and can be selected/deselected by customer")
     option_group: Optional[str] = Field(None, description="Group for exclusive choices (e.g., 'finish_level', 'extra_features')")
+    
+    # Sanitize text fields
+    @field_validator('ref', 'description', 'unit', 'option_group', mode='before')
+    @classmethod
+    def sanitize_text_fields(cls, v):
+        return validate_and_sanitize_text(v)
 
 
 class QuoteIn(BaseModel):
     customer_name: str
-    project_name: Optional[str] = None
+    project_name: Optional[str] = Field(None, description="Project name")
     profile_id: str
     currency: str = "SEK"
     vat_rate: Decimal = Decimal("25.0")
@@ -73,6 +88,12 @@ class QuoteIn(BaseModel):
     )
     room_type: Optional[str] = Field(None, description="Room type for tuning (e.g., bathroom, kitchen)")
     finish_level: Optional[str] = Field(None, description="Finish level for tuning (e.g., basic, standard, premium)")
+    
+    # Sanitize text fields
+    @field_validator('customer_name', 'project_name', 'room_type', 'finish_level', mode='before')
+    @classmethod
+    def sanitize_text_fields(cls, v):
+        return validate_and_sanitize_text(v)
 
 
 class QuoteOutTotals(BaseModel):
@@ -244,10 +265,16 @@ class ProjectRequirementsIn(BaseModel):
     @field_validator("notes")
     @classmethod
     def validate_notes(cls, v):
-        """Validate notes length."""
+        """Validate notes length and sanitize content."""
         if v and len(v) > 2000:
             raise ValueError("Notes too long")
-        return v
+        return validate_and_sanitize_html(v)  # Allow HTML in notes
+    
+    @field_validator("material_prefs", "site_constraints")
+    @classmethod
+    def sanitize_lists(cls, v):
+        """Sanitize list items."""
+        return validate_and_sanitize_list(v)
 
 
 class ProjectRequirementsOut(BaseModel):
@@ -398,6 +425,12 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = Field(None, description="User's full name")
     tenant_id: UUID = Field(..., description="Tenant ID for multi-tenancy")
     is_active: bool = Field(True, description="Whether user account is active")
+    
+    # Sanitize text fields
+    @field_validator('username', 'full_name', mode='before')
+    @classmethod
+    def sanitize_text_fields(cls, v):
+        return validate_and_sanitize_text(v)
 
 
 class UserOut(BaseModel):
@@ -462,6 +495,12 @@ class CompanyCreate(BaseModel):
 
     name: str = Field(..., description="Company name")
     tenant_id: UUID = Field(..., description="Tenant ID for multi-tenancy")
+    
+    # Sanitize text fields
+    @field_validator('name', mode='before')
+    @classmethod
+    def sanitize_name(cls, v):
+        return validate_and_sanitize_text(v)
 
 
 class Company(BaseModel):
@@ -479,6 +518,12 @@ class PriceProfileCreate(BaseModel):
     name: str = Field(..., description="Profile name")
     currency: str = Field(..., description="Currency code")
     vat_rate: Decimal = Field(..., description="VAT rate percentage")
+    
+    # Sanitize text fields
+    @field_validator('name', mode='before')
+    @classmethod
+    def sanitize_name(cls, v):
+        return validate_and_sanitize_text(v)
 
 
 class QuoteOut(BaseModel):

@@ -31,6 +31,7 @@
         "class-variance-authority": "^0.7.0",
         "clsx": "^2.1.0",
         "framer-motion": "^11.0.0",
+        "isomorphic-dompurify": "^2.26.0",
         "lucide-react": "^0.344.0",
         "next": "^14.2.31",
         "react": "18.2.0",
@@ -41,6 +42,7 @@
     },
     "devDependencies": {
         "@playwright/test": "^1.55.0",
+        "@types/dompurify": "^3.0.5",
         "@types/node": "20.11.30",
         "@types/react": "18.2.66",
         "@types/react-dom": "18.2.22",
