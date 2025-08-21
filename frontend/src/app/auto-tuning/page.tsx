@@ -1,7 +1,22 @@
+/**
+ * Auto-Tuning Page - Visa auto-tuning insights
+ * 
+ * Denna sida visar auto-tuning insights för att förbättra offertgenerering.
+ * Skyddad med withAuth HOC och använder apiClient för säkra API-anrop.
+ * 
+ * How to run:
+ * 1. Starta Docker: docker-compose up -d
+ * 2. Gå till: http://localhost:3000/auto-tuning
+ * 3. Sidan skyddas automatiskt med withAuth
+ */
+
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { withAuth } from '@/lib/withAuth'
+import { get } from '@/lib/apiClient'
+import { LoadingSkeleton } from '@/components/system'
 
 interface AutoTuningInsight {
   pattern_key: string
@@ -23,7 +38,18 @@ interface AutoTuningResponse {
   improvement_suggestions: string[]
 }
 
-export default function AutoTuningPage() {
+interface User {
+  id?: string
+  username: string
+  email: string
+  tenant_id: string
+  is_superuser: boolean
+  full_name?: string
+  is_active?: boolean
+  created_at?: string
+}
+
+function AutoTuningPage({ user }: { user: User }) {
   const [insights, setInsights] = useState<AutoTuningResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,29 +62,11 @@ export default function AutoTuningPage() {
   const fetchInsights = async () => {
     try {
       setLoading(true)
-      const token = localStorage.getItem('token')
-      
-      if (!token) {
-        router.push('/login')
-        return
-      }
-
-      const response = await fetch('/api/auto-tuning/insights', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setInsights(data)
-      } else {
-        const errorData = await response.json()
-        setError(errorData.detail || 'Kunde inte hämta auto-tuning insights')
-      }
-    } catch (error) {
+      const data = await get('/api/auto-tuning/insights')
+      setInsights(data)
+    } catch (error: any) {
       console.error('Error fetching insights:', error)
-      setError('Ett fel uppstod vid hämtning av insights')
+      setError(error.message || 'Kunde inte hämta auto-tuning insights')
     } finally {
       setLoading(false)
     }
@@ -82,10 +90,7 @@ export default function AutoTuningPage() {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Hämtar auto-tuning insights...</p>
-          </div>
+          <LoadingSkeleton />
         </div>
       </div>
     )
@@ -119,6 +124,9 @@ export default function AutoTuningPage() {
           <p className="mt-2 text-gray-600">
             Lär dig hur systemet förbättras baserat på dina justeringar
           </p>
+          <div className="mt-2 text-sm text-gray-500">
+            Inloggad som: {user.username} ({user.email})
+          </div>
         </div>
 
         {/* Summary Cards */}
@@ -255,4 +263,7 @@ export default function AutoTuningPage() {
       </div>
     </div>
   )
-} 
+}
+
+// Skydda sidan med withAuth HOC
+export default withAuth(AutoTuningPage) 
