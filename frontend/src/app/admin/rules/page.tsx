@@ -1,7 +1,22 @@
+/**
+ * Admin Rules Page - Hantera generation rules
+ * 
+ * Denna sida hanterar generation rules för automatisk offertgenerering.
+ * Skyddad med withAuth HOC och använder apiClient för säkra API-anrop.
+ * 
+ * How to run:
+ * 1. Starta Docker: docker-compose up -d
+ * 2. Gå till: http://localhost:3000/admin/rules
+ * 3. Sidan skyddas automatiskt med withAuth
+ */
+
 'use client'
 
 import { useState, useEffect } from 'react'
 import { z } from 'zod'
+import { withAuth } from '@/lib/withAuth'
+import { get, put, post } from '@/lib/apiClient'
+import { LoadingSkeleton } from '@/components/system'
 
 // Zod schema för rules JSON validering
 const RulesSchema = z.object({
@@ -31,7 +46,18 @@ interface TestResponse {
   total: number
 }
 
-export default function AdminRulesPage() {
+interface User {
+  id?: string
+  username: string
+  email: string
+  tenant_id: string
+  is_superuser: boolean
+  full_name?: string
+  is_active?: boolean
+  created_at?: string
+}
+
+function AdminRulesPage({ user }: { user: User }) {
   const [rules, setRules] = useState<GenerationRule[]>([])
   const [loading, setLoading] = useState(true)
   const [editingRule, setEditingRule] = useState<string | null>(null)
@@ -59,18 +85,8 @@ export default function AdminRulesPage() {
   const fetchRules = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/admin/rules', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setRules(data)
-      } else {
-        console.error('Failed to fetch rules')
-      }
+      const data = await get('/admin/rules')
+      setRules(data)
     } catch (error) {
       console.error('Error fetching rules:', error)
     } finally {
@@ -112,27 +128,15 @@ export default function AdminRulesPage() {
     }
 
     try {
-      const response = await fetch(`/api/admin/rules/${ruleId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          rules: JSON.parse(editingRules)
-        })
+      await put(`/admin/rules/${ruleId}`, {
+        rules: JSON.parse(editingRules)
       })
-
-      if (response.ok) {
-        setEditingRule(null)
-        setEditingRules('')
-        fetchRules() // Refresh list
-      } else {
-        const errorData = await response.json()
-        setValidationError(`Sparfel: ${errorData.detail}`)
-      }
-    } catch (error) {
-      setValidationError('Ett fel uppstod vid sparande')
+      
+      setEditingRule(null)
+      setEditingRules('')
+      fetchRules() // Refresh list
+    } catch (error: any) {
+      setValidationError(`Sparfel: ${error.message || 'Ett fel uppstod vid sparande'}`)
     }
   }
 
@@ -159,27 +163,14 @@ export default function AdminRulesPage() {
       setTestLoading(true)
       setTestError('')
 
-      const response = await fetch('/api/admin/rules/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          key: rule.key,
-          requirementsData: JSON.parse(testRequirements)
-        })
+      const data = await post('/admin/rules/test', {
+        key: rule.key,
+        requirementsData: JSON.parse(testRequirements)
       })
-
-      if (response.ok) {
-        const data = await response.json()
-        setTestResult(data)
-      } else {
-        const errorData = await response.json()
-        setTestError(`Testfel: ${errorData.detail}`)
-      }
-    } catch (error) {
-      setTestError('Ett fel uppstod vid testning')
+      
+      setTestResult(data)
+    } catch (error: any) {
+      setTestError(`Testfel: ${error.message || 'Ett fel uppstod vid testning'}`)
     } finally {
       setTestLoading(false)
     }
@@ -189,10 +180,7 @@ export default function AdminRulesPage() {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Laddar regler...</p>
-          </div>
+          <LoadingSkeleton />
         </div>
       </div>
     )
@@ -204,6 +192,9 @@ export default function AdminRulesPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin - Generation Rules</h1>
           <p className="text-gray-600">Hantera och testa regler för automatisk generering av offertrader</p>
+          <div className="mt-2 text-sm text-gray-500">
+            Inloggad som: {user.username} ({user.email})
+          </div>
         </div>
 
         {rules.length === 0 ? (
@@ -303,7 +294,7 @@ export default function AdminRulesPage() {
                         <button
                           onClick={() => testRule(rule)}
                           disabled={testLoading}
-                          className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {testLoading ? 'Testar...' : 'Kör test'}
                         </button>
@@ -370,3 +361,6 @@ export default function AdminRulesPage() {
     </div>
   )
 }
+
+// Skydda sidan med withAuth HOC
+export default withAuth(AdminRulesPage)
