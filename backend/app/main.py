@@ -241,6 +241,17 @@ async def get_csrf_token_endpoint():
     return {"csrf_token": token}
 
 
+@app.post("/api/test-endpoint")
+async def test_endpoint(request: Request):
+    """Test endpoint for CSRF protection and POST requests."""
+    return {
+        "message": "POST request successful",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "method": request.method,
+        "headers": dict(request.headers)
+    }
+
+
 @app.post("/auth/login", response_model=schemas.LoginResponse)
 async def login(
     login_data: schemas.LoginRequest, response: Response, db: Session = Depends(get_db)
