@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createQuote } from '@/app/api'
-import { CreateQuoteRequest } from '@/types/quote'
+import { CreateQuoteRequest, CreateQuoteRequestSchema } from '@/types/quote'
 
 interface QuoteFormProps {
   initialData?: CreateQuoteRequest
@@ -22,6 +22,7 @@ export default function QuoteForm({
 }: QuoteFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState<CreateQuoteRequest>(initialData || {
     customer_name: 'Testkund AB',
     project_name: 'Badrum 6 m²',
@@ -65,11 +66,44 @@ export default function QuoteForm({
     }))
   }
 
+  const validateForm = (): boolean => {
+    try {
+      // Validate the entire form using Zod schema
+      CreateQuoteRequestSchema.parse(formData)
+      setValidationErrors({})
+      return true
+    } catch (error: any) {
+      if (error.errors) {
+        const errors: Record<string, string> = {}
+        
+        error.errors.forEach((err: any) => {
+          if (err.path) {
+            const fieldPath = err.path.join('.')
+            errors[fieldPath] = err.message
+          }
+        })
+        
+        setValidationErrors(errors)
+      }
+      return false
+    }
+  }
+
+  const getFieldError = (fieldPath: string): string | undefined => {
+    return validationErrors[fieldPath]
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     console.debug('🔍 QuoteForm: handleSubmit called')
     console.debug('🔍 QuoteForm: formData payload:', formData)
+    
+    // Validate form before submission
+    if (!validateForm()) {
+      console.error('❌ QuoteForm: Validation failed')
+      return
+    }
     
     if (mode === 'edit' && onSave) {
       // Edit mode - call parent onSave
@@ -106,8 +140,8 @@ export default function QuoteForm({
       
     } catch (error) {
       console.error('❌ QuoteForm: Error creating quote:', error)
-      // TODO: Show error toast
-      alert(`Kunde inte skapa offert: ${error}`)
+      // Show validation error instead of alert
+      setValidationErrors({ submit: `Kunde inte skapa offert: ${error}` })
     } finally {
       setLoading(false)
     }
@@ -141,8 +175,13 @@ export default function QuoteForm({
                     value={formData.customer_name}
                     onChange={(e) => handleInputChange('customer_name', e.target.value)}
                     placeholder="Ange kundnamn"
-                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      getFieldError('customer_name') ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   />
+                  {getFieldError('customer_name') && (
+                    <p className="mt-1 text-sm text-red-600">{getFieldError('customer_name')}</p>
+                  )}
                 </div>
                 
                 <div>
@@ -154,8 +193,13 @@ export default function QuoteForm({
                     value={formData.project_name}
                     onChange={(e) => handleInputChange('project_name', e.target.value)}
                     placeholder="Ange projektnamn"
-                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      getFieldError('project_name') ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   />
+                  {getFieldError('project_name') && (
+                    <p className="mt-1 text-sm text-red-600">{getFieldError('project_name')}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -185,8 +229,13 @@ export default function QuoteForm({
                       value={item.description}
                       onChange={(e) => handleItemChange(index, 'description', e.target.value)}
                       placeholder="Beskrivning"
-                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        getFieldError(`items.${index}.description`) ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     />
+                    {getFieldError(`items.${index}.description`) && (
+                      <p className="mt-1 text-sm text-red-600">{getFieldError(`items.${index}.description`)}</p>
+                    )}
                   </div>
                   
                   <div className="col-span-1">
@@ -194,8 +243,13 @@ export default function QuoteForm({
                       value={item.unit}
                       onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
                       placeholder="Enhet"
-                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        getFieldError(`items.${index}.unit`) ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     />
+                    {getFieldError(`items.${index}.unit`) && (
+                      <p className="mt-1 text-sm text-red-600">{getFieldError(`items.${index}.unit`)}</p>
+                    )}
                   </div>
                   
                   <div className="col-span-1">
@@ -204,8 +258,13 @@ export default function QuoteForm({
                       value={item.qty}
                       onChange={(e) => handleItemChange(index, 'qty', parseFloat(e.target.value) || 0)}
                       placeholder="0"
-                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        getFieldError(`items.${index}.qty`) ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     />
+                    {getFieldError(`items.${index}.qty`) && (
+                      <p className="mt-1 text-sm text-red-600">{getFieldError(`items.${index}.qty`)}</p>
+                    )}
                   </div>
                   
                   <div className="col-span-2">
@@ -214,8 +273,13 @@ export default function QuoteForm({
                       value={item.unit_price}
                       onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
                       placeholder="0"
-                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        getFieldError(`items.${index}.unit_price`) ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     />
+                    {getFieldError(`items.${index}.unit_price`) && (
+                      <p className="mt-1 text-sm text-red-600">{getFieldError(`items.${index}.unit_price`)}</p>
+                    )}
                   </div>
                   
                   <div className="col-span-1">
@@ -237,6 +301,9 @@ export default function QuoteForm({
                 </div>
               ))}
               
+              {getFieldError('items') && (
+                <p className="text-sm text-red-600">{getFieldError('items')}</p>
+              )}
               <button type="button" className="w-full p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                 ➕ Lägg till rad
               </button>
@@ -267,6 +334,13 @@ export default function QuoteForm({
               </div>
             </div>
           </div>
+
+          {/* Submit Error Display */}
+          {getFieldError('submit') && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-red-600 text-sm">{getFieldError('submit')}</p>
+            </div>
+          )}
 
           {/* Åtgärdsknappar */}
           <div className="flex justify-end space-x-4">
