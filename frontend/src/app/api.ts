@@ -1,13 +1,70 @@
 // API base URL - use relative URLs to avoid CORS issues
 export const API_BASE = '';
 
+// CSRF Token Management
+let csrfToken: string | null = null;
+
+/**
+ * Get CSRF token from cookie or fetch from server
+ */
+async function getCSRFToken(): Promise<string> {
+  // Try to get token from cookie first
+  const cookieToken = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('csrf_token='))
+    ?.split('=')[1];
+  
+  if (cookieToken) {
+    csrfToken = cookieToken;
+    return cookieToken;
+  }
+  
+  // If no cookie token, fetch from server
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/csrf-token`, {
+      credentials: 'include'
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      csrfToken = data.csrf_token;
+      return csrfToken || '';
+    }
+  } catch (error) {
+    console.warn('Failed to fetch CSRF token:', error);
+  }
+  
+  throw new Error('Failed to get CSRF token');
+}
+
+/**
+ * Create headers with CSRF token for unsafe HTTP methods
+ */
+async function createSecureHeaders(additionalHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    ...additionalHeaders
+  };
+  
+  // Add CSRF token for unsafe methods
+  try {
+    const token = await getCSRFToken();
+    headers['X-CSRF-Token'] = token;
+  } catch (error) {
+    console.warn('Could not add CSRF token to headers:', error);
+  }
+  
+  return headers;
+}
+
 // Authentication functions
 export async function login(username: string, password: string) {
+  const headers = await createSecureHeaders({
+    'Content-Type': 'application/json',
+  });
+  
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     credentials: 'include', // Include cookies
     body: JSON.stringify({ username, password })
   });
@@ -21,8 +78,11 @@ export async function login(username: string, password: string) {
 }
 
 export async function logout() {
+  const headers = await createSecureHeaders();
+  
   const res = await fetch(`${API_BASE}/api/auth/logout`, {
     method: 'POST',
+    headers,
     credentials: 'include', // Include cookies
   });
   
@@ -35,8 +95,11 @@ export async function logout() {
 }
 
 export async function refreshToken() {
+  const headers = await createSecureHeaders();
+  
   const res = await fetch(`${API_BASE}/api/auth/refresh`, {
     method: 'POST',
+    headers,
     credentials: 'include', // Include cookies
   });
   
@@ -79,11 +142,13 @@ export async function createProjectRequirements(payload: any) {
   console.log('=== API DEBUG ===')
   console.log('createProjectRequirements called with payload:', payload)
   
+  const headers = await createSecureHeaders({
+    'Content-Type': 'application/json',
+  });
+  
   const res = await fetch(`${API_BASE}/api/project-requirements`, {
     method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-    },
+    headers,
     credentials: 'include', // Include cookies
     body: JSON.stringify(payload)
   });
@@ -117,11 +182,13 @@ export async function getProjectRequirements() {
 
 // Auto-generation function
 export async function autoGenerateQuote(payload: any) {
+  const headers = await createSecureHeaders({
+    'Content-Type': 'application/json',
+  });
+  
   const res = await fetch(`${API_BASE}/api/quotes/autogenerate`, {
     method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-    },
+    headers,
     credentials: 'include', // Include cookies
     body: JSON.stringify(payload)
   });
@@ -136,11 +203,13 @@ export async function autoGenerateQuote(payload: any) {
 
 // Quote functions (now use Next.js API routes)
 export async function calcQuote(payload: any) {
+  const headers = await createSecureHeaders({
+    'Content-Type': 'application/json',
+  });
+  
   const res = await fetch(`${API_BASE}/api/quotes/calc`, {
     method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-    },
+    headers,
     credentials: 'include', // Include cookies
     body: JSON.stringify(payload)
   });
@@ -153,11 +222,13 @@ import { CreateQuoteRequest, CreateQuoteResponse } from '@/types/quote'
 export async function createQuote(payload: CreateQuoteRequest): Promise<CreateQuoteResponse> {
   console.log('createQuote called with payload:', payload)
   
+  const headers = await createSecureHeaders({
+    'Content-Type': 'application/json',
+  });
+  
   const res = await fetch(`${API_BASE}/api/quotes`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     credentials: 'include', // Include cookies
     body: JSON.stringify(payload)
   });
@@ -216,8 +287,11 @@ export async function getQuoteAdjustments(quoteId: string) {
 }
 
 export async function generatePDF(quoteId: string) {
+  const headers = await createSecureHeaders();
+  
   const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/pdf`, {
     method: 'POST',
+    headers,
     credentials: 'include', // Include cookies
   });
   
