@@ -4,7 +4,10 @@
     "types": ["cypress"]
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx"
+    "e2e/**/*.ts",
+    "support/**/*.ts"
+  ],
+  "exclude": [
+    "../tests/**/*"
   ]
 }

@@ -25,27 +25,9 @@ Cypress.Commands.add('checkTotalsUpdate', (base: string, optional: string, total
   cy.getByTestId('total-amount').should('contain', total)
 })
 
-// Override visit command to handle Next.js routing
-Cypress.Commands.overwrite('visit', (originalFn, url, options) => {
-  // Add custom headers if needed
-  const customOptions = {
-    ...options,
-    headers: {
-      ...options?.headers,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
-      'Accept-Encoding': 'gzip, deflate',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-    }
-  }
-  
-  return originalFn(url, customOptions)
-})
-
 // Custom command to mock API responses
 Cypress.Commands.add('mockApiResponse', (method: string, url: string, response: any) => {
-  cy.intercept(method, url, response).as('mockedApi')
+  cy.intercept(method as any, url, response).as('mockedApi')
 })
 
 // Custom command to check if element is visible and contains text
@@ -64,8 +46,12 @@ Cypress.Commands.add('shouldBeSelected', (selector: string) => {
 })
 
 // Custom command to check if checkbox/radio is not selected
-Cypress.Commands.add('shouldNotBeSelected', (selector: string) => {
-  cy.get(selector).should('not.be.checked')
+Cypress.Commands.add('shouldNotBeSelected', (selector?: string) => {
+  if (selector) {
+    cy.get(selector).should('not.be.checked')
+  } else {
+    cy.get('input').should('not.be.checked')
+  }
 })
 
 // Custom command to select option in radio group
@@ -79,7 +65,7 @@ Cypress.Commands.add('toggleCheckbox', (selector: string) => {
 })
 
 // Custom command to verify PDF download
-Cypress.Commands.add('verifyPdfDownload', (filename: string) => {
+Cypress.Commands.add('verifyPdfDownload', () => {
   // This would need to be implemented based on how PDFs are handled
   // For now, we'll just check if the download button exists and is clickable
   cy.getByTestId('download-pdf').should('be.visible').and('be.enabled')

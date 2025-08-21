@@ -3,14 +3,16 @@
  * 
  * Denna wrapper hanterar:
  * - credentials: 'include' på alla requests
- * - X-CSRF-Token från /csrf endpoint
+ * - X-CSRF-Token från /api/auth/csrf-token endpoint
  * - Automatisk refresh vid 401 och replay av originalanrop
  * - Enkel API för get, post, put, del
+ * - Korrekt URL-hantering utan dubbel prefixning
  * 
  * How to run:
  * 1. Importera: import { get, post, put, del } from '@/lib/apiClient'
- * 2. Använd: const data = await get('/api/endpoint')
+ * 2. Använd: const data = await get('/api/endpoint') eller await post('/auth/login', data)
  * 3. Cookies och CSRF hanteras automatiskt
+ * 4. Vid 401 görs automatisk refresh + replay
  */
 
 // CSRF Token Management
@@ -98,20 +100,46 @@ export class ApiError extends Error {
 const MAX_REFRESH_RETRIES = 1
 
 /**
+ * Normalize URL to ensure correct format
+ * - If URL starts with /api/, use as-is (Next.js proxy)
+ * - If URL starts with /, use as-is (relative to current domain)
+ * - Otherwise, assume it's a full URL
+ */
+function normalizeUrl(url: string): string {
+  // If it's already a full URL, return as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
+  }
+  
+  // If it starts with /api/ or /, use as-is (Next.js will handle proxying)
+  if (url.startsWith('/api/') || url.startsWith('/')) {
+    return url
+  }
+  
+  // Otherwise, assume it should be prefixed with /api/
+  return `/api/${url}`
+}
+
+/**
  * Create headers with CSRF token for unsafe HTTP methods
  */
-async function createHeaders(additionalHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+async function createHeaders(
+  method: string,
+  additionalHeaders: Record<string, string> = {}
+): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...additionalHeaders
   }
 
-  // Add CSRF token for unsafe methods
-  try {
-    const token = await csrf.get()
-    headers['X-CSRF-Token'] = token
-  } catch (error) {
-    console.warn('Could not add CSRF token to headers:', error)
+  // Add CSRF token for unsafe methods (POST, PUT, DELETE, PATCH)
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())) {
+    try {
+      const token = await csrf.get()
+      headers['X-CSRF-Token'] = token
+    } catch (error) {
+      console.warn('Could not add CSRF token to headers:', error)
+    }
   }
 
   return headers
@@ -129,15 +157,18 @@ function isAuthError(response: Response): boolean {
  */
 async function refreshAuth(): Promise<boolean> {
   try {
+    console.log('Attempting to refresh authentication...')
     const response = await fetch('/api/auth/refresh', {
       method: 'POST',
       credentials: 'include'
     })
     
     if (response.ok) {
+      console.log('Authentication refresh successful')
       return true
     }
     
+    console.log('Authentication refresh failed:', response.status)
     return false
   } catch (error) {
     console.error('Auth refresh failed:', error)
@@ -154,23 +185,28 @@ async function apiFetch<T>(
   retryCount: number = 0
 ): Promise<ApiResponse<T>> {
   try {
-    // Create headers
-    const headers = await createHeaders(config.headers)
+    // Normalize URL to ensure correct format
+    const normalizedUrl = normalizeUrl(url)
     
-    // Prepare fetch options
+    // Create headers with CSRF token for unsafe methods
+    const headers = await createHeaders(config.method, config.headers)
+    
+    // Prepare fetch options - ALL requests include credentials
     const fetchOptions: RequestInit = {
       method: config.method,
       headers,
-      credentials: 'include',
+      credentials: 'include', // ✅ Alla requests har credentials: 'include'
       ...(config.body && { body: JSON.stringify(config.body) })
     }
 
+    console.log(`Making ${config.method} request to: ${normalizedUrl}`)
+
     // Make request
-    const response = await fetch(url, fetchOptions)
+    const response = await fetch(normalizedUrl, fetchOptions)
     
     // Handle authentication errors with refresh retry
     if (isAuthError(response) && retryCount < MAX_REFRESH_RETRIES) {
-      console.log('Auth error, attempting refresh...')
+      console.log('Auth error (401), attempting refresh and replay...')
       
       const refreshSuccess = await refreshAuth()
       if (refreshSuccess) {
@@ -178,6 +214,7 @@ async function apiFetch<T>(
         csrf.invalidate()
         
         // Retry original request
+        console.log('Retrying original request after successful refresh...')
         return apiFetch(url, config, retryCount + 1)
       }
     }
@@ -335,7 +372,7 @@ export async function upload<T = any>(
  */
 export async function download(url: string, filename?: string): Promise<void> {
   const response = await fetch(url, {
-    credentials: 'include'
+    credentials: 'include' // ✅ Download requests också inkluderar credentials
   })
   
   if (!response.ok) {
