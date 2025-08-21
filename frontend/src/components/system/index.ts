@@ -5,7 +5,12 @@ export { ErrorState, NetworkErrorState, ServerErrorState, AuthErrorState, NotFou
 export { usePromiseState, useFetch } from './usePromiseState'
 
 // Error handling components
-export { ErrorBoundary } from './ErrorBoundary'
+export { 
+  ErrorBoundary, 
+  AsyncErrorBoundary, 
+  useErrorBoundary, 
+  withErrorBoundary 
+} from './ErrorBoundary'
 export { default as ErrorToast } from './ErrorToast'
 export { default as ErrorToastManager } from './ErrorToastManager'
 export { default as useErrorHandler } from './useErrorHandler'
