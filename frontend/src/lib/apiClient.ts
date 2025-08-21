@@ -35,7 +35,7 @@ class CSRFManager {
     // Fetch new token
     this.fetching = true
     try {
-      const response = await fetch('/api/csrf-token', {
+      const response = await fetch('/api/auth/csrf-token', {
         credentials: 'include'
       })
       
