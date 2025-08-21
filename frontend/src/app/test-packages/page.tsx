@@ -133,7 +133,7 @@ export default function TestPackagesPage() {
           </div>
         ) : (
           <p className="text-gray-500 text-center py-4">
-            Inga paket genererade ännu. Klicka på "Generera 3 paket" för att skapa Basic, Standard och Premium alternativ.
+            Inga paket genererade ännu. Klicka på &quot;Generera 3 paket&quot; för att skapa Basic, Standard och Premium alternativ.
           </p>
         )}
       </div>

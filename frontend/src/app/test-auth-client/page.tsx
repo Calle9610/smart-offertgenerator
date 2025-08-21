@@ -279,11 +279,11 @@ export default function TestAuthClientPage() {
       <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 className="font-semibold text-blue-800 mb-2">📋 Test Instructions</h3>
         <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
-          <li>Starta med "Get Session" för att kontrollera aktuell status</li>
-          <li>Ange användarnamn/lösenord och klicka "Login"</li>
+          <li>Starta med &quot;Get Session&quot; för att kontrollera aktuell status</li>
+          <li>Ange användarnamn/lösenord och klicka &quot;Login&quot;</li>
           <li>Verifiera att session skapas och cookies sätts</li>
-          <li>Testa "Is Authenticated" och "Is Super User"</li>
-          <li>Klicka "Logout" och verifiera att cookies töms</li>
+          <li>Testa &quot;Is Authenticated&quot; och &quot;Is Super User&quot;</li>
+          <li>Klicka &quot;Logout&quot; och verifiera att cookies töms</li>
           <li>Kontrollera att alla requests skickar cookies automatiskt</li>
         </ol>
       </div>

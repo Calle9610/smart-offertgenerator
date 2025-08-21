@@ -80,7 +80,7 @@ export function ErrorTestComponent() {
 /**
  * Component that always throws an error
  */
-export function AlwaysErrorComponent() {
+export function AlwaysErrorComponent(): never {
   throw new Error('This component always throws an error')
 }
 

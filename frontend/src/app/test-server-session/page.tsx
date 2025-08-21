@@ -129,7 +129,7 @@ function ServerSessionTest() {
         <h3 className="font-semibold text-blue-800 mb-2">📋 Test Instructions</h3>
         <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
           <li>Kontrollera att användardata visas korrekt (från server-side session)</li>
-          <li>Klicka "Refresh Page" för att verifiera att session behålls</li>
+          <li>Klicka &quot;Refresh Page&quot; för att verifiera att session behålls</li>
           <li>Navigera till andra sidor för att testa auth-integration</li>
           <li>Testa logout-funktionaliteten</li>
           <li>Verifiera att superuser-behörigheter fungerar</li>

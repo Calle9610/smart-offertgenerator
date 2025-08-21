@@ -19,7 +19,7 @@ import { useState } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { withAuth, withSuperUser } from '@/lib/withAuth'
+import { withAuth } from '@/lib/withAuth'
 import { useRequireAuth, useRequireSuperUser } from '@/lib/useRequireAuth'
 import { LoadingSkeleton } from '@/components/system'
 
@@ -32,7 +32,7 @@ function DashboardContent({ user }: { user: any }) {
         <p><strong>Username:</strong> {user.username}</p>
         <p><strong>Email:</strong> {user.email}</p>
         <p><strong>Tenant:</strong> {user.tenant_id}</p>
-        <Badge variant={user.is_superuser ? "default" : "secondary"}>
+        <Badge variant={user.is_superuser ? 'default' : 'secondary'}>
           {user.is_superuser ? 'Superuser' : 'Regular User'}
         </Badge>
       </div>
@@ -190,7 +190,7 @@ function GuardHooksTest() {
           <Card className="p-4">
             <h3 className="font-semibold mb-2">useRequireAuth Hook</h3>
             <ul className="text-sm space-y-1">
-              <li>• Flexibel syntax: const { user } = useRequireAuth()</li>
+              <li>• Flexibel syntax: const &#123; user &#125; = useRequireAuth()</li>
               <li>• Custom redirect och unauthorized-hantering</li>
               <li>• Mer kontroll över auth-flow</li>
               <li>• Direkt tillgång till auth-state</li>
@@ -204,7 +204,7 @@ function GuardHooksTest() {
         {tabs.map((tab) => (
           <Button
             key={tab.id}
-            variant={activeTab === tab.id ? "default" : "outline"}
+            variant={activeTab === tab.id ? 'default' : 'outline'}
             onClick={() => setActiveTab(tab.id)}
             size="sm"
           >

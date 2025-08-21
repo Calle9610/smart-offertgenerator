@@ -85,13 +85,13 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <ErrorState
           title="Något gick fel"
-          message="Ett oväntat fel uppstod. Prova att ladda om sidan eller kontakta support om problemet kvarstår."
-          variant="error"
+          description="Ett oväntat fel uppstod. Prova att ladda om sidan eller kontakta support om problemet kvarstår."
+          variant="default"
           actions={[
             {
               label: 'Försök igen',
               onClick: this.handleRetry,
-              variant: 'primary'
+              variant: 'default'
             },
             {
               label: 'Ladda om sidan',
@@ -99,11 +99,7 @@ export class ErrorBoundary extends Component<Props, State> {
               variant: 'secondary'
             }
           ]}
-          details={{
-            error: this.state.error?.message || 'Okänt fel',
-            componentStack: this.state.errorInfo?.componentStack || '',
-            timestamp: new Date().toISOString()
-          }}
+
         />
       )
     }
@@ -190,19 +186,16 @@ export class AsyncErrorBoundary extends Component<Props, State> {
       return (
         <ErrorState
           title="Nätverksfel"
-          message="Kunde inte hämta data. Kontrollera din internetanslutning och försök igen."
-          variant="error"
+          description="Kunde inte hämta data. Kontrollera din internetanslutning och försök igen."
+          variant="default"
           actions={[
             {
               label: 'Försök igen',
               onClick: this.handleRetry,
-              variant: 'primary'
+              variant: 'default'
             }
           ]}
-          details={{
-            error: this.state.error?.message || 'Nätverksfel',
-            timestamp: new Date().toISOString()
-          }}
+
         />
       )
     }
