@@ -87,7 +87,7 @@ async def startup_event():
 
 async def seed_initial_data():
     """Seed initial tenant, user, company, and price profile."""
-    db = next(get_db())
+    db = SessionLocal()
     try:
         # Check if we already have data
         existing_tenant = db.query(Tenant).first()
@@ -389,7 +389,7 @@ async def create_user(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
         )
 
-    db = next(get_db())
+    db = SessionLocal()
     try:
         # Check if username or email already exists
         if crud.get_user_by_username(db, user.username):
