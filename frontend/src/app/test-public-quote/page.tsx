@@ -23,10 +23,10 @@ export default function TestPublicQuotePage() {
                 <li>Hämta publika offertdata (inklusive paket)</li>
                 <li>Rendera tre paket som kort/flikar</li>
                 <li>Visa summering och expanderbara rader</li>
-                <li>Knappar "Acceptera paket" med POST till accept endpoint</li>
+                <li>Knappar &quot;Acceptera paket&quot; med POST till accept endpoint</li>
                 <li>Visa bekräftelse efter acceptans</li>
                 <li>Mobilvänlig design</li>
-                <li>Badges: "Bäst värde" (Standard) och "Premium"</li>
+                <li>Badges: &quot;Bäst värde&quot; (Standard) och &quot;Premium&quot;</li>
               </ul>
             </div>
 

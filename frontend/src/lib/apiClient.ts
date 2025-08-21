@@ -50,7 +50,7 @@ class CSRFManager {
       this.queue.forEach(resolve => resolve())
       this.queue = []
       
-      return this.token
+      return this.token!
     } catch (error) {
       console.error('CSRF token fetch failed:', error)
       throw error
@@ -241,7 +241,7 @@ function handleResponse<T>(response: ApiResponse<T>): T {
 export async function get<T = any>(url: string, headers?: Record<string, string>): Promise<T> {
   const response = await apiFetch<T>(url, {
     method: 'GET',
-    headers
+    headers: headers || {}
   })
   
   return handleResponse(response)
@@ -258,7 +258,7 @@ export async function post<T = any>(
   const response = await apiFetch<T>(url, {
     method: 'POST',
     body,
-    headers
+    headers: headers || {}
   })
   
   return handleResponse(response)
@@ -275,7 +275,7 @@ export async function put<T = any>(
   const response = await apiFetch<T>(url, {
     method: 'PUT',
     body,
-    headers
+    headers: headers || {}
   })
   
   return handleResponse(response)
@@ -287,7 +287,7 @@ export async function put<T = any>(
 export async function del<T = any>(url: string, headers?: Record<string, string>): Promise<T> {
   const response = await apiFetch<T>(url, {
     method: 'DELETE',
-    headers
+    headers: headers || {}
   })
   
   return handleResponse(response)
@@ -304,7 +304,7 @@ export async function patch<T = any>(
   const response = await apiFetch<T>(url, {
     method: 'PATCH',
     body,
-    headers
+    headers: headers || {}
   })
   
   return handleResponse(response)
@@ -357,4 +357,4 @@ export async function download(url: string, filename?: string): Promise<void> {
 export { csrf }
 
 // Export types
-export type { ApiResponse, ApiError }
+export type { ApiResponse }

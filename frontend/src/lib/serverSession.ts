@@ -57,7 +57,7 @@ export async function getServerSession(): Promise<User | null> {
     ].filter(Boolean).join('; ')
 
     // Fetch användardata från backend
-    const response = await fetch(`${process.env.BACKEND_URL || 'http://localhost:8000'}/api/users/me`, {
+    const response = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/api/users/me`, {
       headers: {
         'Cookie': cookieHeader,
         'Accept': 'application/json'

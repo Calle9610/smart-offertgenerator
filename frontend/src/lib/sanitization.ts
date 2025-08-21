@@ -5,7 +5,7 @@
  * Uses isomorphic-dompurify for HTML sanitization.
  */
 
-import * as DOMPurify from 'isomorphic-dompurify';
+import DOMPurify from 'isomorphic-dompurify';
 
 // DOMPurify configuration for safe HTML
 const PURIFY_CONFIG = {

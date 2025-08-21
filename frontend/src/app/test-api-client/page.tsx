@@ -199,10 +199,10 @@ export default function TestApiClientPage() {
       <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 className="font-semibold text-blue-800 mb-2">📋 Test Instructions</h3>
         <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700">
-          <li>Starta med "Test CSRF Token" för att verifiera token-hantering</li>
-          <li>Testa "Test GET Request" för att verifiera GET-anrop</li>
-          <li>Testa "Test POST Request" för att verifiera POST med CSRF</li>
-          <li>Testa "Test Backend Health" för att verifiera backend-anslutning</li>
+          <li>Starta med &quot;Test CSRF Token&quot; för att verifiera token-hantering</li>
+          <li>Testa &quot;Test GET Request&quot; för att verifiera GET-anrop</li>
+          <li>Testa &quot;Test POST Request&quot; för att verifiera POST med CSRF</li>
+          <li>Testa &quot;Test Backend Health&quot; för att verifiera backend-anslutning</li>
           <li>Kontrollera att alla requests skickar cookies och CSRF-tokens</li>
         </ol>
       </div>
