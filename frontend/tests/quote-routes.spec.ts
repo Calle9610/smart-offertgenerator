@@ -1,6 +1,6 @@
 // How to run: npx playwright install && npx playwright test
 
-import { test, expect, Page, Route } from '@playwright/test'
+import { test, expect, Route } from '@playwright/test'
 
 test.describe('Quote Routes Navigation', () => {
   test.beforeEach(async ({ page }) => {

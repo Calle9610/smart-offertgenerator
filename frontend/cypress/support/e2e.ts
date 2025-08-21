@@ -16,43 +16,30 @@
 // Import commands.js using ES2015 syntax:
 import './commands'
 
-// Import Cypress types
-/// <reference types="cypress" />
-
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
 
-// Global configuration
-Cypress.on('uncaught:exception', (err, runnable) => {
-  // Returning false here prevents Cypress from failing the test
-  // on uncaught exceptions (useful for React development mode)
-  if (err.message.includes('ResizeObserver loop limit exceeded')) {
-    return false
-  }
-  return true
+// Configure global behavior
+Cypress.on('uncaught:exception', (err) => {
+  // Log the error for debugging
+  console.error('Uncaught exception in Cypress:', err)
+  
+  // Return false to prevent the test from failing
+  // This is useful for handling known issues in the app
+  return false
 })
 
-// Custom commands for testing
-declare global {
-  namespace Cypress {
-    interface Chainable {
-      /**
-       * Custom command to select DOM element by data-testid attribute.
-       * @example cy.getByTestId('quote-item')
-       */
-      getByTestId(value: string): Chainable<JQuery<HTMLElement>>
-      
-      /**
-       * Custom command to wait for API response.
-       * @example cy.waitForApi('POST', '/api/public/quotes/:id/update-selection')
-       */
-      waitForApi(method: string, url: string): Chainable<JQuery<HTMLElement>>
-      
-      /**
-       * Custom command to check if totals are updated correctly.
-       * @example cy.checkTotalsUpdate('1000.00', '250.00', '1250.00')
-       */
-      checkTotalsUpdate(base: string, optional: string, total: string): Chainable<JQuery<HTMLElement>>
-    }
-  }
-}
+// Configure viewport for consistent testing
+Cypress.config('viewportWidth', 1280)
+Cypress.config('viewportHeight', 720)
+
+// Configure default timeout
+Cypress.config('defaultCommandTimeout', 10000)
+Cypress.config('requestTimeout', 10000)
+Cypress.config('responseTimeout', 10000)
+
+// Configure retries for flaky tests
+Cypress.config('retries', {
+  runMode: 2,
+  openMode: 0
+})

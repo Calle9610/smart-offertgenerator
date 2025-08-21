@@ -29,6 +29,7 @@ frontend/.env.production.local
 frontend/.tsbuildinfo
 frontend/test-results/
 frontend/playwright-report/
+frontend/playwright/.auth/
 
 # Docker
 .dockerignore

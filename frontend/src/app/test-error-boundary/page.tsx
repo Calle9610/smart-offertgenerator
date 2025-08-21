@@ -79,12 +79,9 @@ export default function TestErrorBoundaryPage() {
                 <p className="text-yellow-700 text-sm">
                   Detta är en anpassad fallback-komponent som visas istället för standard ErrorState.
                 </p>
-                <button 
-                  onClick={() => window.location.reload()}
-                  className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
-                >
-                  Ladda om sidan
-                </button>
+                <div className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded">
+                  Ladda om sidan (använd F5 eller Cmd+R)
+                </div>
               </div>
             }
           >
