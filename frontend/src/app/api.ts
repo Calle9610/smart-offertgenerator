@@ -3,13 +3,13 @@ export const API_BASE = '';
 
 // Authentication functions
 export async function login(username: string, password: string) {
-  const formData = new FormData();
-  formData.append('username', username);
-  formData.append('password', password);
-  
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
-    body: formData
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies
+    body: JSON.stringify({ username, password })
   });
   
   if (!res.ok) {
@@ -20,11 +20,37 @@ export async function login(username: string, password: string) {
   return res.json();
 }
 
-export async function getCurrentUser(token: string) {
+export async function logout() {
+  const res = await fetch(`${API_BASE}/api/auth/logout`, {
+    method: 'POST',
+    credentials: 'include', // Include cookies
+  });
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Logout failed: ${errorText}`);
+  }
+  
+  return res.json();
+}
+
+export async function refreshToken() {
+  const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include', // Include cookies
+  });
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Token refresh failed: ${errorText}`);
+  }
+  
+  return res.json();
+}
+
+export async function getCurrentUser() {
   const res = await fetch(`${API_BASE}/api/users/me`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+    credentials: 'include', // Include cookies
   });
   
   if (!res.ok) {
@@ -35,11 +61,9 @@ export async function getCurrentUser(token: string) {
   return res.json();
 }
 
-export async function getCompanies(token: string) {
+export async function getCompanies() {
   const res = await fetch(`${API_BASE}/api/companies`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+    credentials: 'include', // Include cookies
   });
   
   if (!res.ok) {
@@ -51,20 +75,16 @@ export async function getCompanies(token: string) {
 }
 
 // Project Requirements functions
-export async function createProjectRequirements(payload: any, token: string) {
+export async function createProjectRequirements(payload: any) {
   console.log('=== API DEBUG ===')
-  console.log('createProjectRequirements called with token:', token ? token.slice(0, 20) + '...' : 'NO TOKEN')
-  console.log('Token length:', token ? token.length : 0)
-  console.log('Token type:', typeof token)
-  console.log('Authorization header:', `Bearer ${token}`)
-  console.log('Payload:', payload)
+  console.log('createProjectRequirements called with payload:', payload)
   
   const res = await fetch(`${API_BASE}/api/project-requirements`, {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
     },
+    credentials: 'include', // Include cookies
     body: JSON.stringify(payload)
   });
   
@@ -82,11 +102,9 @@ export async function createProjectRequirements(payload: any, token: string) {
   return responseData;
 }
 
-export async function getProjectRequirements(token: string) {
+export async function getProjectRequirements() {
   const res = await fetch(`${API_BASE}/api/project-requirements`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+    credentials: 'include', // Include cookies
   });
   
   if (!res.ok) {
@@ -98,13 +116,13 @@ export async function getProjectRequirements(token: string) {
 }
 
 // Auto-generation function
-export async function autoGenerateQuote(payload: any, token: string) {
+export async function autoGenerateQuote(payload: any) {
   const res = await fetch(`${API_BASE}/api/quotes/autogenerate`, {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
     },
+    credentials: 'include', // Include cookies
     body: JSON.stringify(payload)
   });
   
@@ -118,13 +136,12 @@ export async function autoGenerateQuote(payload: any, token: string) {
 
 // Quote functions (now use Next.js API routes)
 export async function calcQuote(payload: any) {
-  const token = localStorage.getItem('token')
   const res = await fetch(`${API_BASE}/api/quotes/calc`, {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
     },
+    credentials: 'include', // Include cookies
     body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error('Calc failed');
@@ -134,21 +151,14 @@ export async function calcQuote(payload: any) {
 import { CreateQuoteRequest, CreateQuoteResponse } from '@/types/quote'
 
 export async function createQuote(payload: CreateQuoteRequest): Promise<CreateQuoteResponse> {
-  const token = localStorage.getItem('token')
-  
-  if (!token) {
-    throw new Error('No authentication token found')
-  }
-  
   console.log('createQuote called with payload:', payload)
-  console.log('Using token:', token ? token.slice(0, 20) + '...' : 'NO TOKEN')
   
   const res = await fetch(`${API_BASE}/api/quotes`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
     },
+    credentials: 'include', // Include cookies
     body: JSON.stringify(payload)
   });
   
@@ -168,11 +178,9 @@ export async function createQuote(payload: CreateQuoteRequest): Promise<CreateQu
 
 import { QuoteDto } from '@/types/quote'
 
-export async function getQuotes(token: string): Promise<QuoteDto[]> {
+export async function getQuotes(): Promise<QuoteDto[]> {
   const res = await fetch(`${API_BASE}/api/quotes`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+    credentials: 'include', // Include cookies
   });
   
   if (!res.ok) {
@@ -194,11 +202,9 @@ export async function getQuote(id: string): Promise<QuoteDto> {
   return res.json();
 }
 
-export async function getQuoteAdjustments(quoteId: string, token: string) {
+export async function getQuoteAdjustments(quoteId: string) {
   const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/adjustments`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+    credentials: 'include', // Include cookies
   });
   
   if (!res.ok) {
@@ -209,12 +215,10 @@ export async function getQuoteAdjustments(quoteId: string, token: string) {
   return res.json();
 }
 
-export async function generatePDF(quoteId: string, token: string) {
+export async function generatePDF(quoteId: string) {
   const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/pdf`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+    credentials: 'include', // Include cookies
   });
   
   if (!res.ok) {

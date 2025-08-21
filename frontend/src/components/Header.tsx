@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { logout, getCurrentUser } from '@/app/api'
 
 /*
  * A11Y CHECKLIST - Header Component
@@ -35,45 +36,33 @@ export default function Header() {
 
   const checkAuthStatus = async () => {
     try {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        setIsAuthenticated(false)
-        setIsLoading(false)
-        return
-      }
-
-      // Verify token with backend
-      const response = await fetch('http://localhost:8000/users/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (response.ok) {
-        const userData = await response.json()
-        setIsAuthenticated(true)
-        setUsername(userData.username)
-      } else {
-        // Token is invalid, clear it
-        localStorage.removeItem('token')
-        setIsAuthenticated(false)
-      }
+      // Check authentication using cookies
+      const userData = await getCurrentUser()
+      setIsAuthenticated(true)
+      setUsername(userData.username)
     } catch (error) {
       console.error('Error checking auth status:', error)
-      localStorage.removeItem('token')
       setIsAuthenticated(false)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     if (window.confirm('Är du säker på att du vill logga ut?')) {
-      localStorage.removeItem('token')
-      setIsAuthenticated(false)
-      setUsername('')
-      // Redirect to home page
-      router.push('/')
+      try {
+        await logout()
+        setIsAuthenticated(false)
+        setUsername('')
+        // Redirect to home page
+        router.push('/')
+      } catch (error) {
+        console.error('Error during logout:', error)
+        // Still clear local state even if logout fails
+        setIsAuthenticated(false)
+        setUsername('')
+        router.push('/')
+      }
     }
   }, [router])
 

@@ -28,6 +28,7 @@ class FinishLevel(str, Enum):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    expires_in: int
 
 
 class TokenData(BaseModel):
@@ -35,6 +36,18 @@ class TokenData(BaseModel):
 
     username: Optional[str] = None
     tenant_id: Optional[UUID] = None
+
+
+class LoginRequest(BaseModel):
+    """Login request schema."""
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """Login response schema."""
+    message: str
+    user: Optional[Dict[str, Any]] = None
 
 
 class QuoteItemIn(BaseModel):
