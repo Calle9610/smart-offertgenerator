@@ -1,14 +1,23 @@
-'use client'
+/**
+ * Edit Quote Page - Redigera befintlig offert
+ * 
+ * Denna sida låter användare redigera befintliga offerter.
+ * Skyddad med withAuth HOC och använder apiClient för säkra API-anrop.
+ * 
+ * How to run:
+ * 1. Starta Docker: docker-compose up -d
+ * 2. Gå till: http://localhost:3000/quotes/[id]/edit
+ * 3. Sidan skyddas automatiskt med withAuth
+ */
 
-// How to run: This page allows editing of existing quotes
-// Navigate to /quotes/[id]/edit to edit a specific quote
-// Reuses QuoteForm component with edit mode
+'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { withAuth } from '@/lib/withAuth'
+import { get, put } from '@/lib/apiClient'
 import QuoteForm from '@/components/QuoteForm'
 import { QuoteDto, CreateQuoteRequest } from '@/types/quote'
-import { getQuote } from '@/app/api'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { LoadingSkeleton } from '@/components/system'
@@ -20,7 +29,18 @@ import {
   X
 } from 'lucide-react'
 
-export default function EditQuotePage() {
+interface User {
+  id?: string
+  username: string
+  email: string
+  tenant_id: string
+  is_superuser: boolean
+  full_name?: string
+  is_active?: boolean
+  created_at?: string
+}
+
+function EditQuotePage({ user }: { user: User }) {
   const router = useRouter()
   const params = useParams()
   const quoteId = params['id'] as string
@@ -37,18 +57,12 @@ export default function EditQuotePage() {
         setLoading(true)
         setError(null)
         
-        // Get token from localStorage
-        const token = localStorage.getItem('token')
-        if (!token) {
-          router.push('/')
-          return
-        }
-
-        const quoteData = await getQuote(quoteId)
+        // Fetch quote data using apiClient
+        const quoteData = await get(`/api/quotes/${quoteId}`)
         setQuote(quoteData)
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching quote:', err)
-        setError(err instanceof Error ? err.message : 'Kunde inte ladda offert')
+        setError(err.message || 'Kunde inte ladda offert')
       } finally {
         setLoading(false)
       }
@@ -57,38 +71,21 @@ export default function EditQuotePage() {
     if (quoteId) {
       fetchQuote()
     }
-  }, [quoteId, router])
+  }, [quoteId])
 
   // Handle save changes
   const handleSave = async (updatedData: CreateQuoteRequest) => {
     try {
       setSaving(true)
       
-      const token = localStorage.getItem('token')
-      if (!token) {
-        throw new Error('Ingen autentiseringstoken hittad')
-      }
-
-      // Update the quote via API
-      const response = await fetch(`/api/quotes/${quoteId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(updatedData)
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Kunde inte uppdatera offert: ${errorText}`)
-      }
+      // Update the quote via apiClient
+      await put(`/api/quotes/${quoteId}`, updatedData)
 
       // Redirect back to quote view
       router.push(`/quotes/${quoteId}`)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving quote:', err)
-      setError(err instanceof Error ? err.message : 'Kunde inte spara ändringar')
+      setError(err.message || 'Kunde inte spara ändringar')
     } finally {
       setSaving(false)
     }
@@ -222,6 +219,9 @@ export default function EditQuotePage() {
                 <p className="text-gray-600">
                   Offert #{quote.id.slice(0, 8)} - {quote.customer}
                 </p>
+                <div className="mt-1 text-sm text-gray-500">
+                  Inloggad som: {user.username} ({user.email})
+                </div>
               </div>
             </div>
             
@@ -262,3 +262,6 @@ export default function EditQuotePage() {
     </div>
   )
 }
+
+// Skydda sidan med withAuth HOC
+export default withAuth(EditQuotePage)
