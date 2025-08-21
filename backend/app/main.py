@@ -11,6 +11,10 @@ from uuid import UUID
 import jinja2
 from fastapi import Depends, FastAPI, HTTPException, status, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+# Import CSRF protection
+from .csrf import get_csrf_token
+from .middleware import CSRFMiddleware, SecurityHeadersMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 # from .pdf_generator import pdf_generator  # Temporarily disabled for testing
@@ -49,6 +53,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# CSRF protection middleware
+app.add_middleware(CSRFMiddleware)
+
+# Security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Jinja2 template setup
 template_loader = jinja2.FileSystemLoader(searchpath="./templates")
@@ -215,6 +225,13 @@ def readiness_check(db: Session = Depends(get_db)):
 
 
 # Authentication endpoints
+@app.get("/api/auth/csrf-token")
+async def get_csrf_token_endpoint():
+    """Get CSRF token for client-side requests."""
+    token = get_csrf_token()
+    return {"csrf_token": token}
+
+
 @app.post("/auth/login", response_model=schemas.LoginResponse)
 async def login(
     login_data: schemas.LoginRequest, response: Response, db: Session = Depends(get_db)
