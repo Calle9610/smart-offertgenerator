@@ -25,7 +25,7 @@ import { login } from '@/app/api'
  */
 
 interface LoginFormProps {
-  onLogin: (token: string) => void
+  onLogin: () => void
 }
 
 export default function LoginForm({ onLogin }: LoginFormProps) {
@@ -45,10 +45,9 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
     try {
       const response = await login(username, password)
       console.log('LoginForm: Login successful, response:', response)
-      console.log('LoginForm: Calling onLogin with token:', response.access_token.slice(0, 20) + '...')
       
-      // Call the onLogin callback to save token
-      onLogin(response.access_token)
+      // Call the onLogin callback (no token needed, cookies are set automatically)
+      onLogin()
       
       // Redirect to homepage after successful login
       router.push('/')

@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
-import { createProjectRequirements } from '@/app/api'
+import { createProjectRequirements, getCurrentUser } from '@/app/api'
 import LoginForm from './LoginForm'
 
 // Zod schema for project requirements
@@ -35,46 +35,22 @@ export default function IntakeWizard({ onComplete }: IntakeWizardProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [requirementsId, setRequirementsId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [token, setToken] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Check authentication on mount
   useEffect(() => {
-    console.log('=== localStorage DEBUG ===')
-    console.log('localStorage keys:', Object.keys(localStorage))
-    console.log('localStorage.getItem("token"):', localStorage.getItem('token'))
-    console.log('localStorage.getItem("other"):', localStorage.getItem('other'))
+    console.log('IntakeWizard mounted, checking authentication...')
     
-    const storedToken = localStorage.getItem('token')
-    console.log('IntakeWizard mounted, storedToken:', storedToken)
-    console.log('storedToken type:', typeof storedToken)
-    console.log('storedToken length:', storedToken ? storedToken.length : 0)
-    console.log('storedToken truthy check:', !!storedToken)
-    
-    if (storedToken) {
-      // Validate token by testing it against backend
-      fetch(`${process.env['NEXT_PUBLIC_API_BASE'] || 'http://localhost:8000'}/users/me`, {
-        headers: {
-          'Authorization': `Bearer ${storedToken}`
-        }
-      })
-      .then(response => {
-        if (response.ok) {
-          console.log('Token is valid, setting it')
-          setToken(storedToken)
-        } else {
-          console.log('Token is invalid, clearing it')
-          localStorage.removeItem('token')
-          setToken(null)
-        }
+    // Check authentication using cookies
+    getCurrentUser()
+      .then(() => {
+        console.log('User is authenticated')
+        setIsAuthenticated(true)
       })
       .catch(error => {
-        console.log('Error validating token:', error)
-        localStorage.removeItem('token')
-        setToken(null)
+        console.log('User is not authenticated:', error)
+        setIsAuthenticated(false)
       })
-    } else {
-      console.log('No token found in localStorage')
-    }
   }, [])
 
   const {
@@ -98,25 +74,30 @@ export default function IntakeWizard({ onComplete }: IntakeWizardProps) {
 
   const watchedValues = watch()
 
-  const handleLogin = (newToken: string) => {
-    console.log('handleLogin called with token:', newToken.slice(0, 20) + '...')
-    setToken(newToken)
-    localStorage.setItem('token', newToken)
-    console.log('Token saved to localStorage and state')
+  const handleLogin = () => {
+    console.log('handleLogin called, checking authentication...')
+    // Re-check authentication after login
+    getCurrentUser()
+      .then(() => {
+        console.log('User is now authenticated')
+        setIsAuthenticated(true)
+      })
+      .catch(error => {
+        console.log('User is still not authenticated:', error)
+        setIsAuthenticated(false)
+      })
   }
 
   console.log('=== RENDER DEBUG ===')
-  console.log('Current token state:', token)
-  console.log('Token truthy check:', !!token)
-  console.log('About to check if (!token):', !token)
-
-  // If no token, show login form
-  if (!token) {
-    console.log('No token in state, showing LoginForm')
-    return <LoginForm onLogin={handleLogin} />
-  }
-
-  console.log('Token exists, showing form. Token:', token.slice(0, 20) + '...')
+      console.log('Current authentication state:', isAuthenticated)
+    
+    // If not authenticated, show login form
+    if (!isAuthenticated) {
+      console.log('User not authenticated, showing LoginForm')
+      return <LoginForm onLogin={handleLogin} />
+    }
+    
+    console.log('User is authenticated, showing form')
 
   // Auto-save after each step
   const handleStepComplete = async (step: number) => {
@@ -132,8 +113,8 @@ export default function IntakeWizard({ onComplete }: IntakeWizardProps) {
     try {
       setIsSubmitting(true)
       
-      if (!token) {
-        throw new Error('No authentication token')
+      if (!isAuthenticated) {
+        throw new Error('User not authenticated')
       }
 
       const payload = {
@@ -150,7 +131,7 @@ export default function IntakeWizard({ onComplete }: IntakeWizardProps) {
       console.log('Sending payload:', payload)
       console.log('Using API function from:', typeof createProjectRequirements)
 
-      const data = await createProjectRequirements(payload, token)
+      const data = await createProjectRequirements(payload)
       console.log('API response:', data)
       
       setRequirementsId(data.id)
