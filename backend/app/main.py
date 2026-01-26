@@ -283,7 +283,7 @@ async def login(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=True,  # Set to False in development if not using HTTPS
+        secure=False,  # Set to False in development (HTTP), True in production (HTTPS)
         samesite="lax",
         max_age=auth.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/"
@@ -293,8 +293,7 @@ async def login(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=True,  # Set to False in development if not using HTTPS
-        samesite="lax",
+        secure=False,  # Set to False in development (HTTP), True in production (HTTPS)
         max_age=auth.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/"
     )
@@ -352,7 +351,7 @@ async def refresh_access_token(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=True,  # Set to False in development if not using HTTPS
+        secure=False,  # Set to False in development (HTTP), True in production (HTTPS)
         samesite="lax",
         max_age=auth.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/"

@@ -38,6 +38,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             '/openapi.json',
             '/api/auth/csrf-token',  # CSRF token endpoint itself
             '/api/auth/login',       # Login doesn't need CSRF (uses credentials)
+            '/auth/login',           # Login endpoint (without /api prefix)
+            '/auth/refresh',         # Refresh endpoint (without /api prefix)
+            '/auth/logout',          # Logout endpoint (without /api prefix)
             '/api/public/',          # Public endpoints
         ]
     

@@ -17,7 +17,8 @@ interface RootLayoutProps {
 
 export default async function RootLayout({ children }: RootLayoutProps) {
   // Hämta server-side session för alla sidor
-  // Publika sidor kommer att hanteras av komponenterna själva
+  // Om ingen session finns, låt client-side auth hantera det
+  // Detta förhindrar hydration-fel och oändliga API-anrop
   const user = await getServerSession()
 
   return (

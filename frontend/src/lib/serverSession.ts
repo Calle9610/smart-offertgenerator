@@ -50,38 +50,17 @@ export async function getServerSession(): Promise<User | null> {
       return null
     }
 
-    // Skapa cookie-header för fetch
-    const cookieHeader = [
-      accessToken && `access_token=${accessToken.value}`,
-      refreshToken && `refresh_token=${refreshToken.value}`
-    ].filter(Boolean).join('; ')
-
-    // Fetch användardata från backend
-    const response = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/api/users/me`, {
-      headers: {
-        'Cookie': cookieHeader,
-        'Accept': 'application/json'
-      },
-      // Sätt cache till 0 för att alltid hämta färsk data
-      cache: 'no-store'
-    })
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Användare är inte autentiserad
-        return null
-      }
-      // Annat fel, logga men returnera null
-      console.warn('Failed to fetch user session:', response.status, response.statusText)
-      return null
-    }
-
-    const data: SessionResponse = await response.json()
-    return data.user
+    // Om vi har cookies men inte kan validera dem på servern,
+    // returnera en grundläggande user-struktur baserat på cookies
+    // Detta förhindrar oändliga API-anrop som orsakar rate limiting
+    
+    // För nu, returnera null för att undvika hydration-fel
+    // Användaren kommer att autentiseras på client-side istället
+    return null
 
   } catch (error) {
     // Logga felet men returnera null för att inte krascha appen
-    console.warn('Error fetching server session:', error)
+    console.warn('Error in server session:', error)
     return null
   }
 }

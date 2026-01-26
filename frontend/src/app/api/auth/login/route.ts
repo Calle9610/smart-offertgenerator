@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.formData()
+    const body = await request.json()
     
     // Proxy request to backend
-    const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/token`, {
+    const backendResponse = await fetch(`${process.env['BACKEND_URL'] || 'http://localhost:8000'}/auth/login`, {
       method: 'POST',
-      body: body
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body)
     })
 
     if (!backendResponse.ok) {
@@ -19,7 +22,17 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await backendResponse.json()
-    return NextResponse.json(data)
+    
+    // Create response with cookies from backend
+    const response = NextResponse.json(data)
+    
+    // Copy cookies from backend response to frontend response
+    const setCookieHeaders = backendResponse.headers.getSetCookie()
+    setCookieHeaders.forEach(cookie => {
+      response.headers.append('Set-Cookie', cookie)
+    })
+    
+    return response
 
   } catch (error) {
     console.error('Error in login API route:', error)

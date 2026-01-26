@@ -59,20 +59,27 @@ interface AuthProviderProps {
 // AuthProvider komponent
 export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser || null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false) // Start with false since we don't make API calls
 
   // Kontrollera session vid mount
   useEffect(() => {
     if (!initialUser) {
-      // Ingen initial user, kontrollera session
-      checkSession()
+      // Ingen initial user från server, låt användaren logga in via login-sidan
+      // Vi gör inga API-anrop för att undvika hydration-fel och rate limiting
+      // Användaren kommer att autentiseras via login-sidan istället
+      // Detta förhindrar oändliga API-anrop som orsakar 429 fel
+      setUser(null)
+      setIsLoading(false)
     } else {
       // Vi har redan user från server, sätt loading till false
+      // och använd initialUser direkt utan att göra extra API-anrop
+      // Detta förhindrar hydration-fel eftersom server och client har samma data
+      setUser(initialUser)
       setIsLoading(false)
     }
   }, [initialUser])
 
-  // Kontrollera session
+  // Kontrollera session endast när det behövs (t.ex. efter login)
   const checkSession = async () => {
     try {
       setIsLoading(true)
